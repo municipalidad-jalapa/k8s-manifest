@@ -1,0 +1,42 @@
+stages:
+  - validate
+  - apply
+
+validate-manifests:
+  stage: validate
+  image:
+    name: alpine/kubectl:1.35.3
+    entrypoint: [""]
+  script:
+    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-dev
+    - kubectl apply --dry-run=client -f qa/
+    - kubectl apply --dry-run=client -f production/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+apply-qa:
+  stage: apply
+  image:
+    name: alpine/kubectl:1.35.3
+    entrypoint: [""]
+  environment:
+    name: qa
+  script:
+    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-dev
+    - kubectl apply -f qa/
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+apply-production:
+  stage: apply
+  image:
+    name: alpine/kubectl:1.35.3
+    entrypoint: [""]
+  environment:
+    name: production
+  script:
+    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-prod
+    - kubectl apply -f production/
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
