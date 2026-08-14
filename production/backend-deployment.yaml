@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-api-buses
-  namespace: qa
+  namespace: production
 spec:
   replicas: 1
   selector:
