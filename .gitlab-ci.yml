@@ -8,8 +8,9 @@ validate-manifests:
     name: alpine/kubectl:1.35.3
     entrypoint: [""]
   script:
-    - kubectl apply --dry-run=client --validate=false -f qa/
-    - kubectl apply --dry-run=client --validate=false -f production/
+    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-dev
+    - kubectl apply --dry-run=client -f qa/
+    - kubectl apply --dry-run=client -f production/
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
