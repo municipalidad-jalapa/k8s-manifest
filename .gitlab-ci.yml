@@ -5,7 +5,7 @@ stages:
 validate-manifests:
   stage: validate
   image:
-    name: bitnami/kubectl:1.31
+    name: alpine/kubectl:1.35.3
     entrypoint: [""]
   script:
     - kubectl apply --dry-run=client -f qa/
@@ -16,7 +16,7 @@ validate-manifests:
 apply-qa:
   stage: apply
   image:
-    name: bitnami/kubectl:1.31
+    name: alpine/kubectl:1.35.3
     entrypoint: [""]
   environment:
     name: qa
@@ -29,7 +29,7 @@ apply-qa:
 apply-production:
   stage: apply
   image:
-    name: bitnami/kubectl:1.31
+    name: alpine/kubectl:1.35.3
     entrypoint: [""]
   environment:
     name: production
