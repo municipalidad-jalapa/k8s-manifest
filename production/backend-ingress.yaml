@@ -3,23 +3,27 @@ kind: Ingress
 metadata:
   name: app-buses-ingress
   namespace: production
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /api(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /api
+            pathType: Prefix
             backend:
               service:
                 name: backend-api-buses
                 port:
                   number: 80
-          - path: /()(.*)
-            pathType: ImplementationSpecific
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-api-buses
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: frontend-app-buses
