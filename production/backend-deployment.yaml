@@ -1,72 +1,59 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend-api-buses
+  name: frontend-app-buses
   namespace: production
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: backend-api-buses
+      app: frontend-app-buses
   template:
     metadata:
       labels:
-        app: backend-api-buses
+        app: frontend-app-buses
     spec:
       containers:
-        - name: backend-api-buses
-          image: acrbusesjalapa.azurecr.io/backend-api-buses:latest
+        - name: frontend-app-buses
+          image: acrbusesjalapa.azurecr.io/frontend-app-buses:latest
           ports:
-            - containerPort: 8080
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: production
-            - name: DB_HOST
-              value: postgres
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_NAME
-              value: ecoruta
-            - name: DB_USER
-              value: ecoruta
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: DB_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: db-secrets
-                  key: JWT_SECRET
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /usr/share/nginx/html/config.js
+              subPath: config.js
           resources:
             requests:
-              memory: "384Mi"
-              cpu: "100m"
+              memory: "32Mi"
+              cpu: "50m"
             limits:
-              memory: "768Mi"
-              cpu: "1000m"
+              memory: "128Mi"
+              cpu: "200m"
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
-              port: 8080
-            initialDelaySeconds: 30
+              path: /
+              port: 80
+            initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
-              port: 8080
-            initialDelaySeconds: 10
+              path: /
+              port: 80
+            initialDelaySeconds: 5
             periodSeconds: 5
+      volumes:
+        - name: config-volume
+          configMap:
+            name: frontend-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend-api-buses
+  name: frontend-app-buses
   namespace: production
 spec:
   selector:
-    app: backend-api-buses
+    app: frontend-app-buses
   ports:
     - port: 80
-      targetPort: 8080
+      targetPort: 80
