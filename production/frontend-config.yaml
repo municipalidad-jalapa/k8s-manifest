@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: production
+data:
+  config.js: |
+    window.__ECORUTA__ = {
+      apiUrl: '',
+    };
