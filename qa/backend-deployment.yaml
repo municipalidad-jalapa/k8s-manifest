@@ -18,6 +18,25 @@ spec:
           image: acrbusesjalapa.azurecr.io/backend-api-buses:latest
           ports:
             - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: qa
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/ecoruta
+            - name: SPRING_DATASOURCE_USERNAME
+              value: ecoruta
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "1000m"
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
