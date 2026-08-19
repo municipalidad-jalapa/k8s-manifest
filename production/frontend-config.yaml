@@ -6,5 +6,5 @@ metadata:
 data:
   config.js: |
     window.__ECORUTA__ = {
-      apiUrl: '',
+      apiUrl: 'http://20.83.88.147',
     };
