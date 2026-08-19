@@ -25,7 +25,7 @@ apply-qa:
     - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-dev
     # El patron --dry-run=client -o yaml | kubectl apply -f - permite ACTUALIZAR
     # el Secret si ya existe, en vez de fallar por duplicado.
-    - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" -n qa --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -39,7 +39,7 @@ apply-production:
     name: production
   script:
     - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-prod
-    - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" -n production --dry-run=client -o yaml | kubectl apply -f -
+    - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" -n production --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f production/
   when: manual
   rules:
