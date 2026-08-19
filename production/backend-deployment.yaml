@@ -21,15 +21,24 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: production
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/ecoruta
-            - name: SPRING_DATASOURCE_USERNAME
+            - name: DB_HOST
+              value: postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
               value: ecoruta
-            - name: SPRING_DATASOURCE_PASSWORD
+            - name: DB_USER
+              value: ecoruta
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: db-secrets
                   key: DB_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: JWT_SECRET
           resources:
             requests:
               memory: "384Mi"
