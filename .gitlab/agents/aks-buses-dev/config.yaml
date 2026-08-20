@@ -1,3 +1,4 @@
 ci_access:
   projects:
     - id: municipalidad-jalapa/backend/api-buses-jalapa
+    - id: municipalidad-jalapa/frontend/app-movil-buses
