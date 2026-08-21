@@ -39,6 +39,11 @@ spec:
                 secretKeyRef:
                   name: db-secrets
                   key: JWT_SECRET
+            - name: ECORUTA_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: ECORUTA_ADMIN_TOKEN
           resources:
             requests:
               memory: "384Mi"
