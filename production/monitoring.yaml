@@ -1,0 +1,202 @@
+# SCRUM-151 (HU-56, Devops — "Saber si el sistema esta caido").
+#
+# Solo en produccion: QA se reinicia constantemente durante pruebas y
+# generaria falsas alarmas. Prometheus scrapea /actuator/prometheus del
+# backend (AC2: disponibilidad, latencia, 5xx) y Alertmanager manda un
+# correo (AC1: caida del backend; AC3: telemetria detenida en horario de
+# operacion 7am-8pm).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: production
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    rule_files:
+      - /etc/prometheus/rules/alertas.yml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager:9093"]
+
+    scrape_configs:
+      - job_name: backend
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ["backend-api-buses:80"]
+
+  alertas.yml: |
+    groups:
+      - name: ecoruta-produccion
+        rules:
+          - alert: BackendCaido
+            expr: up{job="backend"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "El backend de EcoRuta no responde"
+              description: "Prometheus no puede scrapear backend-api-buses en produccion desde hace 2+ minutos."
+
+          - alert: TelemetriaDetenida
+            # 7am-8pm hora del contenedor (UTC). Ver nota de zona horaria en el Deployment.
+            expr: (hour() >= 7 and hour() < 20) and (time() - ecoruta_telemetria_ultima_recepcion_timestamp_seconds > 900)
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Dejo de llegar telemetria de los buses"
+              description: "No se recibe un lote de telemetria hace mas de 15 minutos durante horario de operacion (7am-8pm)."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      # Horario de operacion en hora de Guatemala (UTC-6): 7am-8pm local es
+      # 13:00-02:00 UTC. Mas simple fijar el contenedor a America/Guatemala
+      # para que la regla "hour() >= 7 and hour() < 20" sea directa.
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          env:
+            - name: TZ
+              value: America/Guatemala
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=6h
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: config
+              mountPath: /etc/prometheus/rules/alertas.yml
+              subPath: alertas.yml
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: production
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: production
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp-mail.outlook.com:587'
+      smtp_from: 'umgseminario0@outlook.com'
+      smtp_auth_username: 'umgseminario0@outlook.com'
+      smtp_auth_password_file: /etc/alertmanager/secrets/smtp-password
+      smtp_require_tls: true
+
+    route:
+      receiver: equipo-email
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+
+    receivers:
+      - name: equipo-email
+        email_configs:
+          # Correo del equipo: cambiar aqui (no requiere tocar codigo ni
+          # el Secret de la contraseña SMTP).
+          - to: 'umgseminario0@outlook.com'
+            send_resolved: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager/alertmanager.yml
+              subPath: alertmanager.yml
+            - name: smtp-secret
+              mountPath: /etc/alertmanager/secrets
+              readOnly: true
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: smtp-secret
+          secret:
+            secretName: alertmanager-smtp-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: production
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093
