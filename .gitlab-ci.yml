@@ -35,26 +35,6 @@ apply-qa:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-test-email-alertmanager:
-  # Job temporal para verificar SCRUM-151 (HU-56): dispara una alerta
-  # sintetica directo a la API de Alertmanager (sin tocar el backend real)
-  # y muestra sus logs para confirmar que el correo efectivamente se envio.
-  # Se borra despues de la verificacion, no es parte del pipeline normal.
-  stage: apply
-  image:
-    name: alpine/kubectl:1.35.3
-    entrypoint: [""]
-  environment:
-    name: production
-  script:
-    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-prod
-    - kubectl run test-alerta-hu56 --rm -i --restart=Never -n production --image=curlimages/curl:8.10.1 -- curl -s -X POST http://alertmanager:9093/api/v2/alerts -H "Content-Type:application/json" -d '[{"labels":{"alertname":"PruebaManualHU56","severity":"critical"},"annotations":{"summary":"Prueba manual de HU-56","description":"Verificando que Alertmanager envia el correo real a umgseminario0@outlook.com."}}]'
-    - sleep 10
-    - kubectl logs -n production deploy/alertmanager --tail=80
-  when: manual
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
 apply-production:
   stage: apply
   image:
