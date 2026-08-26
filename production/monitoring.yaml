@@ -125,9 +125,13 @@ metadata:
 data:
   alertmanager.yml: |
     global:
-      smtp_smarthost: 'smtp-mail.outlook.com:587'
-      smtp_from: 'umgseminario0@outlook.com'
-      smtp_auth_username: 'umgseminario0@outlook.com'
+      # Outlook desactivo SMTP AUTH basico a nivel de plataforma para cuentas
+      # personales, sin opcion de reactivarlo (ver hilo de SCRUM-151). Se usa
+      # una cuenta de Gmail dedicada como remitente en su lugar; el correo de
+      # destino en el receiver de abajo sigue siendo el de Outlook.
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'notificacionesdesistema123@gmail.com'
+      smtp_auth_username: 'notificacionesdesistema123@gmail.com'
       smtp_auth_password_file: /etc/alertmanager/secrets/smtp-password
       smtp_require_tls: true
 
