@@ -45,6 +45,8 @@ apply-production:
   script:
     - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-prod
     - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" -n production --dry-run=client -o yaml | kubectl apply -f -
+    # SCRUM-151 (HU-56): contraseña SMTP de Alertmanager, separada de db-secrets.
+    - kubectl create secret generic alertmanager-smtp-secret --from-literal=smtp-password="$ALERTMANAGER_SMTP_PASSWORD" -n production --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f production/
   when: manual
   rules:
