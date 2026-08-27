@@ -31,7 +31,7 @@ apply-qa:
     # El patron --dry-run=client -o yaml | kubectl apply -f - permite ACTUALIZAR
     # el Secret si ya existe, en vez de fallar por duplicado.
     - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" --from-literal=ECORUTA_ADMIN_TOKEN="$ECORUTA_ADMIN_TOKEN" -n qa --dry-run=client -o yaml | kubectl apply -f -
-    # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo con wal-g.
+    # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo (pg_dump).
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
@@ -49,9 +49,64 @@ apply-production:
     - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" -n production --dry-run=client -o yaml | kubectl apply -f -
     # SCRUM-151 (HU-56): contraseña SMTP de Alertmanager, separada de db-secrets.
     - kubectl create secret generic alertmanager-smtp-secret --from-literal=smtp-password="$ALERTMANAGER_SMTP_PASSWORD" -n production --dry-run=client -o yaml | kubectl apply -f -
-    # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo con wal-g.
+    # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo (pg_dump).
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n production --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f production/
   when: manual
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
+
+.scheduled_backup_template:
+  # SCRUM-163 (HU-68): "el respaldo se genera aunque el cluster haya estado
+  # apagado a la hora programada... la ejecucion se dispara desde fuera".
+  # El CronJob de Kubernetes NO corre si el cluster esta apagado, y nada
+  # recupera esa ejecucion perdida despues. Este pipeline programado de
+  # GitLab si corre siempre (no depende del cluster), prende el cluster si
+  # hace falta, dispara el mismo Job del CronJob a demanda, y lo apaga de
+  # nuevo si el fue quien lo prendio.
+  stage: apply
+  image: mcr.microsoft.com/azure-cli:2.65.0
+  script:
+    - az login --service-principal -u "$AZURE_SP_APP_ID" -p "$AZURE_SP_PASSWORD" --tenant "$AZURE_SP_TENANT" -o none
+    - |
+      ESTADO_PREVIO=$(az aks show -n "$AKS_NOMBRE" -g rg-buses-jalapa --query powerState.code -o tsv)
+      echo "Estado del cluster antes de correr: $ESTADO_PREVIO"
+      if [ "$ESTADO_PREVIO" != "Running" ]; then
+        echo "Cluster apagado, prendiendolo para poder respaldar..."
+        az aks start -n "$AKS_NOMBRE" -g rg-buses-jalapa
+      fi
+    - az aks get-credentials -n "$AKS_NOMBRE" -g rg-buses-jalapa --overwrite-existing
+    - |
+      KVER=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+      curl -Ls -o /usr/local/bin/kubectl "https://dl.k8s.io/release/$KVER/bin/linux/amd64/kubectl"
+      chmod +x /usr/local/bin/kubectl
+    - |
+      until kubectl get ns >/dev/null 2>&1; do sleep 10; done
+    - |
+      JOB_NOMBRE="postgres-backup-programado-$(date +%s)"
+      kubectl create job "$JOB_NOMBRE" --from=cronjob/postgres-backup -n "$NAMESPACE"
+      kubectl wait --for=condition=complete "job/$JOB_NOMBRE" -n "$NAMESPACE" --timeout=300s
+      kubectl logs "job/$JOB_NOMBRE" -n "$NAMESPACE"
+    - |
+      if [ "$ESTADO_PREVIO" != "Running" ]; then
+        echo "El cluster estaba apagado antes: lo vuelvo a apagar."
+        az aks stop -n "$AKS_NOMBRE" -g rg-buses-jalapa --no-wait
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+scheduled-backup-qa:
+  extends: .scheduled_backup_template
+  variables:
+    AKS_NOMBRE: aks-buses-dev
+    NAMESPACE: qa
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $BACKUP_ENV == "qa"'
+
+scheduled-backup-production:
+  extends: .scheduled_backup_template
+  variables:
+    AKS_NOMBRE: aks-buses-prod
+    NAMESPACE: production
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $BACKUP_ENV == "production"'
