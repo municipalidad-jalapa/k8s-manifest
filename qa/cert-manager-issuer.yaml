@@ -1,0 +1,27 @@
+# SCRUM-309 (HU-137): emision y renovacion automatica de certificados TLS
+# con Let's Encrypt, via cert-manager (instalado con el job manual
+# install-cert-manager en .gitlab-ci.yml, no versionado aca porque es un
+# release oficial de terceros).
+#
+# Si la renovacion falla: Let's Encrypt manda un correo de aviso a la
+# direccion de abajo ~20 dias antes de que el certificado expire (es el
+# unico mecanismo de alerta de Let's Encrypt, no hay nada nuestro que lo
+# revise). El certificado dura 90 dias; cert-manager reintenta la
+# renovacion automaticamente unos 30 dias antes de expirar. Si sigue
+# fallando, revisar: `kubectl describe certificate ecoruta-qa-tls -n qa`
+# y `kubectl describe challenge -n qa` para ver el motivo (el escenario
+# mas comun es que la etiqueta DNS de la IP publica se haya perdido).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: umgseminario0@outlook.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
