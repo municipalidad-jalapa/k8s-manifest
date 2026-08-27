@@ -1,11 +1,7 @@
-# SCRUM-163 (HU-68): respaldo base diario con wal-g, fuera del cluster AKS
-# (Azure Blob Storage). Combinado con el archivado continuo de WAL que se
-# configuro en postgres.yaml, esto da recuperacion a un punto en el tiempo,
-# no solo al ultimo snapshot diario.
-#
-# El backup corre via "kubectl exec" al pod de postgres en vez de un pg_dump
-# aparte: wal-g necesita acceso local a PGDATA (es un backup fisico, no
-# logico), y ese acceso ya existe dentro del propio pod.
+# SCRUM-163 (HU-68): respaldo logico diario (pg_dump comprimido) guardado
+# fuera del cluster AKS, en Azure Blob Storage. La recuperacion a un punto
+# en el tiempo queda fuera de alcance de esta historia (ver nota en Jira);
+# se conserva un punto de restauracion por dia.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -43,6 +39,11 @@ metadata:
   namespace: qa
 spec:
   # 03:00 UTC = 21:00 hora de Guatemala, fuera del horario de operacion.
+  # Si el cluster esta apagado a esta hora, este CronJob simplemente no
+  # corre (Kubernetes no recupera ejecuciones perdidas): por eso existe
+  # ademas el pipeline programado de GitLab (scheduled-backup-qa en
+  # .gitlab-ci.yml), que dispara el respaldo desde fuera del cluster y
+  # prende el cluster si hace falta.
   schedule: "0 3 * * *"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -55,22 +56,44 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: pg-backup
-              image: alpine/kubectl:1.35.3
+              image: mcr.microsoft.com/azure-cli:2.65.0
+              env:
+                - name: AZURE_STORAGE_ACCOUNT
+                  value: ecorutabackups
+                - name: AZURE_STORAGE_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: azure-backup-secret
+                      key: AZURE_STORAGE_ACCESS_KEY
               command:
                 - /bin/sh
                 - -c
                 - |
                   set -e
-                  echo "Iniciando backup base con wal-g..."
-                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g backup-push "$PGDATA"
-                  echo "Backup completado. Aplicando retencion (14 backups full)..."
-                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g delete retain FULL 14 --confirm
-                  echo "Backups actuales:"
-                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g backup-list
+                  echo "Instalando kubectl..."
+                  KVER=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+                  curl -Ls -o /usr/local/bin/kubectl "https://dl.k8s.io/release/$KVER/bin/linux/amd64/kubectl"
+                  chmod +x /usr/local/bin/kubectl
+
+                  ARCHIVO="ecoruta-$(date +%Y%m%d-%H%M).sql.gz"
+                  echo "Generando respaldo: $ARCHIVO"
+                  kubectl exec -n qa postgres-0 -- sh -c 'pg_dump -U ecoruta -d ecoruta | gzip' > "/tmp/$ARCHIVO"
+
+                  echo "Subiendo a Azure Blob Storage..."
+                  az storage blob upload \
+                    --account-name "$AZURE_STORAGE_ACCOUNT" \
+                    --account-key "$AZURE_STORAGE_ACCESS_KEY" \
+                    --container-name pg-backups \
+                    --name "qa/$ARCHIVO" \
+                    --file "/tmp/$ARCHIVO" \
+                    --overwrite
+
+                  echo "Respaldo subido: qa/$ARCHIVO"
+                  echo "(la retencion de 14 dias la aplica la politica de ciclo de vida del storage account, no este job)"
               resources:
                 requests:
-                  memory: "64Mi"
+                  memory: "128Mi"
                   cpu: "50m"
                 limits:
-                  memory: "128Mi"
-                  cpu: "200m"
+                  memory: "256Mi"
+                  cpu: "300m"
