@@ -77,6 +77,43 @@ apply-production:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
+production-schedule-toggle:
+  # Prende/apaga produccion segun el horario de operacion (7am-8pm hora de
+  # Guatemala = 13:00-02:00 UTC), para no pagar computo fuera de esas horas.
+  # Un solo job para los dos horarios programados (13:00 y 02:00 UTC): el
+  # proyecto no permite variables por pipeline schedule
+  # (ci_pipeline_variables_minimum_override_role: no_one_allowed), asi que
+  # decide la accion segun la hora UTC actual en vez de una variable.
+  stage: apply
+  image: mcr.microsoft.com/azure-cli:2.65.0
+  script:
+    - |
+      HORA_UTC=$(date -u +%H)
+      if [ "$HORA_UTC" = "13" ]; then
+        ACCION=start
+      elif [ "$HORA_UTC" = "02" ]; then
+        ACCION=stop
+      else
+        echo "Hora $HORA_UTC UTC no coincide con 13 (7am GT) ni 02 (8pm GT). No hago nada."
+        exit 0
+      fi
+      echo "Accion: $ACCION"
+    - az login --service-principal -u "$AZURE_SP_APP_ID" -p "$AZURE_SP_PASSWORD" --tenant "$AZURE_SP_TENANT" -o none
+    - |
+      if [ "$ACCION" = "start" ]; then
+        for intento in 1 2 3 4 5; do
+          if az aks start -n aks-buses-prod -g rg-buses-jalapa; then
+            break
+          fi
+          echo "Intento $intento fallo (probablemente una operacion en curso), reintentando en 30s..."
+          sleep 30
+        done
+      else
+        az aks stop -n aks-buses-prod -g rg-buses-jalapa --no-wait
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
 .scheduled_backup_template:
   # SCRUM-163 (HU-68): "el respaldo se genera aunque el cluster haya estado
   # apagado a la hora programada... la ejecucion se dispara desde fuera".
