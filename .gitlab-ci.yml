@@ -100,13 +100,9 @@ scheduled-backup-qa:
   variables:
     AKS_NOMBRE: aks-buses-dev
     NAMESPACE: qa
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $BACKUP_ENV == "qa"'
 
 scheduled-backup-production:
   extends: .scheduled_backup_template
   variables:
     AKS_NOMBRE: aks-buses-prod
     NAMESPACE: production
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $BACKUP_ENV == "production"'
