@@ -19,6 +19,27 @@ validate-manifests:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
+install-cert-manager:
+  # SCRUM-309 (HU-137): instala cert-manager (release oficial de terceros,
+  # no vendorizado en este repo). Manual y una sola vez por cluster, no
+  # forma parte del flujo normal de apply-qa. Necesario antes de aplicar
+  # qa/cert-manager-issuer.yaml (ClusterIssuer), que si no existe el CRD
+  # de cert-manager falla el apply-qa normal.
+  stage: apply
+  image:
+    name: alpine/kubectl:1.35.3
+    entrypoint: [""]
+  environment:
+    name: qa
+  script:
+    - kubectl config use-context municipalidad-jalapa/infraestructura/k8s-manifest:aks-buses-dev
+    - kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
+    - kubectl wait --for=condition=available --timeout=180s deployment/cert-manager -n cert-manager
+    - kubectl wait --for=condition=available --timeout=180s deployment/cert-manager-webhook -n cert-manager
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
 apply-qa:
   stage: apply
   image:
