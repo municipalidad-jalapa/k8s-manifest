@@ -94,6 +94,20 @@ spec:
                 secretKeyRef:
                   name: azure-backup-secret
                   key: AZURE_STORAGE_ACCESS_KEY
+            # wal-g usa estas variables estandar de libpq para conectarse al
+            # correr backup-push (necesita coordinar el backup con Postgres,
+            # a diferencia de wal-push que solo copia el archivo de WAL).
+            - name: PGUSER
+              value: ecoruta
+            - name: PGDATABASE
+              value: ecoruta
+            - name: PGHOST
+              value: /var/run/postgresql
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secrets
+                  key: DB_PASSWORD
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
