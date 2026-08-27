@@ -1,0 +1,76 @@
+# SCRUM-163 (HU-68): respaldo base diario con wal-g, fuera del cluster AKS
+# (Azure Blob Storage). Combinado con el archivado continuo de WAL que se
+# configuro en postgres.yaml, esto da recuperacion a un punto en el tiempo,
+# no solo al ultimo snapshot diario.
+#
+# El backup corre via "kubectl exec" al pod de postgres en vez de un pg_dump
+# aparte: wal-g necesita acceso local a PGDATA (es un backup fisico, no
+# logico), y ese acceso ya existe dentro del propio pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-backup-runner
+  namespace: qa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-backup-runner
+  namespace: qa
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-backup-runner
+  namespace: qa
+subjects:
+  - kind: ServiceAccount
+    name: postgres-backup-runner
+    namespace: qa
+roleRef:
+  kind: Role
+  name: postgres-backup-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: qa
+spec:
+  # 03:00 UTC = 21:00 hora de Guatemala, fuera del horario de operacion.
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: postgres-backup-runner
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-backup
+              image: alpine/kubectl:1.35.3
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "Iniciando backup base con wal-g..."
+                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g backup-push "$PGDATA"
+                  echo "Backup completado. Aplicando retencion (14 backups full)..."
+                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g delete retain FULL 14 --confirm
+                  echo "Backups actuales:"
+                  kubectl exec -n qa postgres-0 -- /walg-bin/wal-g backup-list
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"

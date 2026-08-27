@@ -31,6 +31,8 @@ apply-qa:
     # El patron --dry-run=client -o yaml | kubectl apply -f - permite ACTUALIZAR
     # el Secret si ya existe, en vez de fallar por duplicado.
     - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" --from-literal=ECORUTA_ADMIN_TOKEN="$ECORUTA_ADMIN_TOKEN" -n qa --dry-run=client -o yaml | kubectl apply -f -
+    # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo con wal-g.
+    - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
