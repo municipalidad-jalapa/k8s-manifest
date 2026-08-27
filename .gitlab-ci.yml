@@ -73,7 +73,15 @@ apply-production:
       echo "Estado del cluster antes de correr: $ESTADO_PREVIO"
       if [ "$ESTADO_PREVIO" != "Running" ]; then
         echo "Cluster apagado, prendiendolo para poder respaldar..."
-        az aks start -n "$AKS_NOMBRE" -g rg-buses-jalapa
+        # Reintenta si Azure todavia tiene una operacion de stop/start en
+        # curso de otra fuente (ej. alguien lo apago manualmente hace poco).
+        for intento in 1 2 3 4 5; do
+          if az aks start -n "$AKS_NOMBRE" -g rg-buses-jalapa; then
+            break
+          fi
+          echo "Intento $intento fallo (probablemente una operacion en curso), reintentando en 30s..."
+          sleep 30
+        done
       fi
     - az aks get-credentials -n "$AKS_NOMBRE" -g rg-buses-jalapa --overwrite-existing
     - |
