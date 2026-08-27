@@ -2,14 +2,32 @@
 
 ## Nombre DNS asignado
 
-`ecoruta-qa.westus2.cloudapp.azure.com` — etiqueta DNS de Azure sobre la
-IP pública del Ingress de `aks-buses-dev` (gratis, sin dominio comprado).
-La etiqueta vive en la IP pública, no en el clúster: si se recrea la IP
-pública (por ejemplo al recrear el node pool desde cero) hay que volver a
-asignarla con:
+`ecoruta-qa-app.westus2.cloudapp.azure.com` — etiqueta DNS de Azure sobre la
+IP pública **de salida** de `aks-buses-dev` (la que usa `aksOutboundRule`
+para el egreso a internet del cluster), reutilizada también como entrada
+para el Ingress. Gratis, sin dominio comprado.
+
+**Importante:** la suscripción de Azure tiene un límite de 3 IPs públicas
+por región, y las otras 2 ya las usa `aks-buses-prod` (una de salida, una
+de entrada). Por eso el Ingress de QA NO tiene su propia IP dedicada —
+comparte la de salida existente vía las anotaciones del Service:
+
+```yaml
+service.beta.kubernetes.io/azure-load-balancer-ipv4: "4.154.249.165"
+```
+
+en `ingress-nginx-controller` (namespace `ingress-nginx`, no versionado en
+este repo porque se instaló con Helm fuera de git). **No borrar esa IP
+pensando que no tiene tráfico real** — el load balancer de Azure la usa
+para dos cosas a la vez (entrada del Ingress y salida del cluster), y
+`az network public-ip delete` lo va a rechazar igual, pero primero hay que
+sacarla como frontend del Ingress si algún día se necesita liberarla.
+
+Si se recrea la IP pública (por ejemplo al recrear el node pool desde
+cero) hay que volver a asignarle la etiqueta:
 
 ```bash
-az network public-ip update -g <resource-group-de-los-nodos> -n <nombre-de-la-ip> --dns-name ecoruta-qa
+az network public-ip update -g <resource-group-de-los-nodos> -n <nombre-de-la-ip> --dns-name ecoruta-qa-app
 ```
 
 ## Quién lo administra
