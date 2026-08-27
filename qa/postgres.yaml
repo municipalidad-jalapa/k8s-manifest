@@ -30,12 +30,44 @@ spec:
       labels:
         app: postgres
     spec:
+      initContainers:
+        # SCRUM-163 (HU-68): trae el binario de wal-g a un volumen compartido.
+        # No hay imagen oficial con wal-g + postgis juntos, asi que se copia
+        # el binario estatico en vez de mantener una imagen propia.
+        - name: instalar-walg
+          image: alpine:3.20
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              wget -qO /tmp/wal-g.tar.gz https://github.com/wal-g/wal-g/releases/download/v3.0.9/wal-g-pg-22.04-amd64.tar.gz
+              tar -xzf /tmp/wal-g.tar.gz -C /walg-bin
+              mv /walg-bin/wal-g-pg-22.04-amd64 /walg-bin/wal-g
+              chmod 755 /walg-bin/wal-g
+          volumeMounts:
+            - name: walg-bin
+              mountPath: /walg-bin
       containers:
         - name: postgres
           image: postgis/postgis:16-3.4
           ports:
             - containerPort: 5432
               name: postgres
+          # wal_level=replica + archive_mode habilitan el archivado continuo
+          # de WAL que necesita wal-g para dar recuperacion a un punto en el
+          # tiempo (SCRUM-163 AC3), no solo al ultimo backup diario.
+          args:
+            - "-c"
+            - "wal_level=replica"
+            - "-c"
+            - "archive_mode=on"
+            - "-c"
+            - "archive_command=/walg-bin/wal-g wal-push %p"
+            # Empuja el WAL cada 5 min aunque no haya actividad, para acotar
+            # la ventana de perdida de datos en un sistema de bajo trafico.
+            - "-c"
+            - "archive_timeout=300"
           env:
             - name: POSTGRES_DB
               value: ecoruta
@@ -50,9 +82,21 @@ spec:
             # impide que initdb use el directorio raiz del montaje.
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: WALG_AZ_PREFIX
+              value: azure://pg-backups/qa
+            - name: AZURE_STORAGE_ACCOUNT
+              value: ecorutabackups
+            - name: AZURE_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: azure-backup-secret
+                  key: AZURE_STORAGE_ACCESS_KEY
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: walg-bin
+              mountPath: /walg-bin
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -74,6 +118,8 @@ spec:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-data
+        - name: walg-bin
+          emptyDir: {}
 ---
 # ---------- Acceso interno ----------
 # ClusterIP: accesible solo desde dentro del clúster, nunca desde internet.
