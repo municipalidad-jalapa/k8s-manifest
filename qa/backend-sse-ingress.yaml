@@ -1,5 +1,8 @@
 # SCRUM-309 (HU-137) AC4: el stream de posiciones sigue funcionando sobre
 # TLS, sin cortes ni buffering. Mismo patron que production (SCRUM-149).
+# Sin tls: ni cert-manager: QA se expone via Tailscale Funnel, que termina
+# el HTTPS en su propio borde (ver qa/tailscale-funnel.yaml y
+# qa/backend-ingress.yaml).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,18 +12,10 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    # Sin anotacion de cert-manager a proposito: reutiliza el mismo Secret
-    # ecoruta-qa-tls que emite app-buses-ingress. Si los dos Ingress pidieran
-    # el certificado, cert-manager crearia dos Certificate para el mismo
-    # Secret y competirian entre si.
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - ecoruta-qa-app.westus2.cloudapp.azure.com
-      secretName: ecoruta-qa-tls
   rules:
-    - host: ecoruta-qa-app.westus2.cloudapp.azure.com
+    - host: ecoruta-qa.tail47a5f7.ts.net
       http:
         paths:
           - path: /api/v1/telemetria/stream

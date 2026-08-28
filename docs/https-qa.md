@@ -1,68 +1,127 @@
 # HTTPS en QA (SCRUM-309 / HU-137)
 
-## Nombre DNS asignado
+## Solución final: Tailscale Funnel
 
-`ecoruta-qa-app.westus2.cloudapp.azure.com` — etiqueta DNS de Azure sobre la
-IP pública **de salida** de `aks-buses-dev` (la que usa `aksOutboundRule`
-para el egreso a internet del cluster), reutilizada también como entrada
-para el Ingress. Gratis, sin dominio comprado.
+QA se expone a internet vía **Tailscale Funnel**, no con una IP pública de
+Azure. Se intentó primero con `cert-manager` + Let's Encrypt sobre una IP
+pública compartida (ver sección "Camino descartado" abajo) — la cuota de
+IPs públicas de la suscripción está agotada (3/3) y no se puede aumentar
+por autoservicio (plan Free de soporte de Azure). Tailscale evita el
+problema por completo: el pod hace una conexión **saliente** hacia la red
+de Tailscale, sin necesitar ninguna IP pública ni puerto de entrada propio.
 
-**Importante:** la suscripción de Azure tiene un límite de 3 IPs públicas
-por región, y las otras 2 ya las usa `aks-buses-prod` (una de salida, una
-de entrada). Por eso el Ingress de QA NO tiene su propia IP dedicada —
-comparte la de salida existente vía las anotaciones del Service:
+## Nombre público
 
-```yaml
-service.beta.kubernetes.io/azure-load-balancer-ipv4: "4.154.249.165"
-```
-
-en `ingress-nginx-controller` (namespace `ingress-nginx`, no versionado en
-este repo porque se instaló con Helm fuera de git). **No borrar esa IP
-pensando que no tiene tráfico real** — el load balancer de Azure la usa
-para dos cosas a la vez (entrada del Ingress y salida del cluster), y
-`az network public-ip delete` lo va a rechazar igual, pero primero hay que
-sacarla como frontend del Ingress si algún día se necesita liberarla.
-
-Si se recrea la IP pública (por ejemplo al recrear el node pool desde
-cero) hay que volver a asignarle la etiqueta:
-
-```bash
-az network public-ip update -g <resource-group-de-los-nodos> -n <nombre-de-la-ip> --dns-name ecoruta-qa-app
-```
+`https://ecoruta-qa.tail47a5f7.ts.net` — asignado automáticamente por
+Tailscale (variable `TS_HOSTNAME=ecoruta-qa` en
+`qa/tailscale-funnel.yaml`, combinado con el nombre del tailnet). Si se
+recrea el pod desde cero con un tailnet distinto, este nombre cambiaría —
+en ese caso hay que actualizar `qa/backend-ingress.yaml`,
+`qa/backend-sse-ingress.yaml` y `CORS_ORIGENES` en
+`qa/backend-deployment.yaml` con el nuevo nombre.
 
 ## Quién lo administra
 
-Equipo DevOps del proyecto (Seminario UMG). El `ClusterIssuer` y los
-`Ingress` con TLS están versionados en este repo (`qa/cert-manager-issuer.yaml`,
-`qa/backend-ingress.yaml`, `qa/backend-sse-ingress.yaml`).
+Equipo DevOps del proyecto (Seminario UMG), cuenta de Tailscale con correo
+`umgseminario0@outlook.com`. Todo lo versionado en este repo:
+`qa/tailscale-funnel.yaml` (Deployment + PVC de estado + config de Serve),
+`qa/backend-ingress.yaml`, `qa/backend-sse-ingress.yaml`.
+
+**Importante — configuración fuera de este repo, en la cuenta de
+Tailscale:** hubo que agregar un permiso de política (ACL) que no viene
+por defecto, desde **console.tailscale.com → Policies → JSON editor**:
+
+```json
+"nodeAttrs": [
+  {
+    "target": ["autogroup:member"],
+    "attr": ["funnel"]
+  }
+]
+```
+
+Sin esto, el pod reporta "Funnel on" localmente pero el dominio nunca se
+publica de verdad en DNS público (queda como si no existiera). Si algún
+día Funnel deja de funcionar después de reconfigurar la política de
+acceso, revisar primero que este bloque siga presente.
 
 ## Cómo funciona
 
-- `cert-manager` (instalado con el job manual `install-cert-manager` del
-  pipeline, release oficial de terceros, no vendorizado en este repo)
-  emite el certificado vía Let's Encrypt, desafío HTTP-01 a través del
-  mismo `ingress-nginx` que ya está corriendo.
-- El certificado dura 90 días; `cert-manager` intenta renovarlo
-  automáticamente unos 30 días antes de que expire. No requiere
-  intervención manual en el caso normal.
-- `ingress-nginx` redirige HTTP → HTTPS automáticamente en cuanto el
-  `Ingress` tiene una sección `tls:` (no hace falta ninguna anotación
-  aparte para esto).
+- El Deployment `tailscale-funnel` (namespace `qa`) corre el contenedor
+  oficial `tailscale/tailscale`, autenticado con una auth key guardada
+  como Secret de Kubernetes (`tailscale-secret`, viene de la variable de
+  CI/CD `TAILSCALE_AUTH_KEY`, enmascarada).
+- Modo `TS_USERSPACE=true`: no necesita `NET_ADMIN` ni acceso a
+  `/dev/net/tun`, alcanza para este caso (no enruta tráfico de otros pods).
+- `TS_KUBE_SECRET=""`: el estado del nodo se guarda en el PVC
+  (`tailscale-state`), no en un Secret de Kubernetes — evita necesitar
+  permisos RBAC extra.
+- `TS_SERVE_CONFIG` apunta a un `ConfigMap` con la config de Serve/Funnel:
+  proxea todo el tráfico hacia `ingress-nginx-controller` (el mismo
+  Ingress controller que ya usa el resto de QA), que a su vez enruta por
+  path/host como siempre. Tailscale termina el TLS en su propio borde y le
+  habla a `ingress-nginx` en HTTP simple — por eso los `Ingress` de QA ya
+  **no** tienen sección `tls:` ni anotación de `cert-manager`.
+- El certificado lo emite y renueva Tailscale automáticamente (vía ACME
+  con desafío DNS-01 usando su propia infraestructura de DNS) — no
+  depende de `cert-manager` ni de que ningún puerto de Azure esté
+  accesible desde internet.
 
-## Si la renovación falla
+## Evidencia de que funciona (probado real, no solo desplegado)
 
-Let's Encrypt manda un correo de aviso a `umgseminario0@outlook.com`
-(la dirección de registro del `ClusterIssuer`) unos 20 días antes de que
-el certificado expire, si detecta que la renovación automática no está
-funcionando — es el único mecanismo de alerta, no hay nada propio del
-proyecto que lo revise activamente.
+```
+$ curl -sv https://ecoruta-qa.tail47a5f7.ts.net/
+< HTTP/1.1 200 OK
+(HTML real de la app, certificado aceptado sin -k / sin advertencia)
 
-Para diagnosticar manualmente:
+$ curl https://ecoruta-qa.tail47a5f7.ts.net/api/v1/telemetria/posicion
+HTTP_CODE:204   (comportamiento esperado, documentado, sin posicion aun)
 
-```bash
-kubectl describe certificate ecoruta-qa-tls -n qa
-kubectl describe challenge -n qa
+$ curl -N https://ecoruta-qa.tail47a5f7.ts.net/api/v1/telemetria/stream
+:latido   (el stream SSE conecta y entrega datos al instante, sin cortes)
 ```
 
-Causa más común: se perdió la etiqueta DNS de la IP pública (ver sección
-de arriba) — sin ella, Let's Encrypt no puede validar el dominio.
+## Si algo falla / renovación del certificado
+
+Tailscale renueva el certificado solo, sin intervención manual. Para
+diagnosticar problemas:
+
+```bash
+kubectl logs -n qa deploy/tailscale-funnel
+kubectl exec -n qa deploy/tailscale-funnel -- tailscale funnel status
+```
+
+Causas más probables si deja de funcionar:
+1. El bloque `nodeAttrs` de la política de Tailscale se borró o modificó
+   (ver sección de arriba).
+2. La auth key expiró o se revocó — hay que generar una nueva en
+   Tailscale y actualizar la variable de CI/CD `TAILSCALE_AUTH_KEY`.
+3. El PVC de estado (`tailscale-state`) se perdió — el pod se re-registra
+   como un dispositivo nuevo (posible nombre distinto si hay colisión),
+   hay que revisar el hostname asignado y actualizar los `Ingress` si
+   cambió.
+
+## Camino descartado: IP pública de Azure + cert-manager
+
+Se intentó primero exponer QA con una IP pública de Azure y `cert-manager`
++ Let's Encrypt (patrón estándar de Kubernetes). No se pudo completar:
+
+- La suscripción tiene un límite de 3 IPs públicas Standard SKU por
+  región, ya agotado (2 en producción, 1 de salida en QA).
+- Se intentó compartir la IP de salida existente de QA también para
+  entrada — técnicamente válido en Azure, pero la IP quedó en un estado
+  roto que nunca se pudo reparar (confirmado comparando contra la IP
+  nativa de producción, que sí funciona; y recreando la configuración de
+  Kubernetes desde cero sin éxito).
+- El aumento de cuota está bloqueado por autoservicio (API rechaza con
+  `ResourceNotAvailableForOffer`) y por ticket de soporte (`InvalidSupportPlan`,
+  el plan de soporte es Free). Pendiente intentarlo desde el portal web,
+  que a veces permite esto aunque la API lo bloquee.
+- Recrear la IP pública completa desde cero también choca con la misma
+  cuota: hace falta tener la IP vieja y la nueva a la vez por un momento
+  para no perder la salida a internet, y eso pide una 4ª IP.
+
+Si en el futuro se libera cupo de IPs públicas (aumento de cuota
+aprobado, o se libera una de las 3 actuales), esta ruta queda disponible
+como alternativa — los manifiestos de `cert-manager` ya no están en el
+repo, habría que rehacerlos siguiendo el mismo patrón que se usó acá.

@@ -75,6 +75,11 @@ spec:
               value: ecoruta-qa
             - name: TS_STATE_DIR
               value: /var/lib/tailscale
+            # Vacio a proposito: sin esto, el contenedor intenta guardar el
+            # estado en un Secret de Kubernetes en vez del PVC, y necesita
+            # permisos RBAC (get/update de Secrets) que no le dimos.
+            - name: TS_KUBE_SECRET
+              value: ""
             # Modo userspace: no necesita NET_ADMIN ni /dev/net/tun, alcanza
             # para exponer este servicio (no hace falta enrutar trafico de
             # otros pods a traves de este nodo de Tailscale).
