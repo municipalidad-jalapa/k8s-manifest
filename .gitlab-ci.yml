@@ -38,7 +38,7 @@ install-cert-manager:
     - kubectl wait --for=condition=available --timeout=180s deployment/cert-manager-webhook -n cert-manager
   when: manual
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
 
 apply-qa:
   stage: apply
@@ -56,7 +56,11 @@ apply-qa:
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    # $CI_PIPELINE_SOURCE != "schedule": sin esto, cada pipeline programado
+    # (respaldos, prender/apagar produccion) tambien dispara este job, y
+    # falla con un "failed" falso si QA esta apagado en ese momento (QA no
+    # tiene horario fijo, se prende solo cuando alguien lo usa).
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
 
 apply-production:
   stage: apply
@@ -75,7 +79,7 @@ apply-production:
     - kubectl apply -f production/
   when: manual
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
 
 production-schedule-toggle:
   # Prende/apaga produccion segun el horario de operacion (7am-8pm hora de
