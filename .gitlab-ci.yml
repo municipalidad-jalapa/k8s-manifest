@@ -54,6 +54,8 @@ apply-qa:
     - kubectl create secret generic db-secrets --from-literal=DB_PASSWORD="$DB_PASSWORD" --from-literal=JWT_SECRET="$JWT_SECRET" --from-literal=ECORUTA_ADMIN_TOKEN="$ECORUTA_ADMIN_TOKEN" -n qa --dry-run=client -o yaml | kubectl apply -f -
     # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo (pg_dump).
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
+    # SCRUM-309 (HU-137): auth key de Tailscale para exponer QA sin IP publica.
+    - kubectl create secret generic tailscale-secret --from-literal=TAILSCALE_AUTH_KEY="$TAILSCALE_AUTH_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
     # $CI_PIPELINE_SOURCE != "schedule": sin esto, cada pipeline programado

@@ -1,0 +1,104 @@
+# SCRUM-309 (HU-137): expone QA a internet via Tailscale Funnel en vez de
+# una IP publica de Azure. La suscripcion tiene un limite de 3 IPs publicas
+# Standard por region, ya agotado (2 en produccion, 1 en QA), y convertir la
+# IP de salida de QA en compartida (entrada+salida) dejo esa IP en un estado
+# roto que no se pudo reparar (ver docs/https-qa.md para el detalle
+# completo). Tailscale hace una conexion SALIENTE desde este pod hacia la
+# red de Tailscale, sin necesitar ninguna IP publica ni puerto de entrada
+# propio; "Funnel" es lo que hace ese acceso publico en internet, con
+# certificado HTTPS automatico (Tailscale lo emite y renueva, no
+# cert-manager).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tailscale-state
+  namespace: qa
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: managed-csi
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-serve-config
+  namespace: qa
+data:
+  # ${TS_CERT_DOMAIN} lo sustituye el propio contenedor de Tailscale por el
+  # dominio real asignado (algo como ecoruta-qa.<tailnet>.ts.net), que se
+  # conoce recien despues de que el pod se registra la primera vez.
+  serve-config.json: |
+    {
+      "TCP": {
+        "443": {"HTTPS": true}
+      },
+      "Web": {
+        "${TS_CERT_DOMAIN}:443": {
+          "Handlers": {
+            "/": {"Proxy": "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80"}
+          }
+        }
+      },
+      "AllowFunnel": {
+        "${TS_CERT_DOMAIN}:443": true
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-funnel
+  namespace: qa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tailscale-funnel
+  template:
+    metadata:
+      labels:
+        app: tailscale-funnel
+    spec:
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale:stable
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-secret
+                  key: TAILSCALE_AUTH_KEY
+            - name: TS_HOSTNAME
+              value: ecoruta-qa
+            - name: TS_STATE_DIR
+              value: /var/lib/tailscale
+            # Modo userspace: no necesita NET_ADMIN ni /dev/net/tun, alcanza
+            # para exponer este servicio (no hace falta enrutar trafico de
+            # otros pods a traves de este nodo de Tailscale).
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_SERVE_CONFIG
+              value: /config/serve-config.json
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/tailscale
+            - name: serve-config
+              mountPath: /config
+              readOnly: true
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: tailscale-state
+        - name: serve-config
+          configMap:
+            name: tailscale-serve-config
