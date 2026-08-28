@@ -46,7 +46,7 @@ spec:
                   key: ECORUTA_ADMIN_TOKEN
             # SCRUM-309 (HU-137): origen https habilitado tras el TLS de QA.
             - name: CORS_ORIGENES
-              value: "https://ecoruta-qa-app.westus2.cloudapp.azure.com"
+              value: "https://ecoruta-qa.tail47a5f7.ts.net"
           resources:
             requests:
               memory: "384Mi"

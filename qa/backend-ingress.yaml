@@ -3,19 +3,16 @@ kind: Ingress
 metadata:
   name: app-buses-ingress
   namespace: qa
-  annotations:
-    # SCRUM-309 (HU-137): cert-manager emite y renueva el certificado solo.
-    # ingress-nginx redirige HTTP -> HTTPS automaticamente en cuanto hay
-    # una seccion tls: en el Ingress, sin necesidad de otra anotacion.
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+  # SCRUM-309 (HU-137): sin tls: ni anotacion de cert-manager a proposito.
+  # QA se expone via Tailscale Funnel (ver qa/tailscale-funnel.yaml), que
+  # termina el HTTPS en su propio borde y le habla a este Ingress en HTTP
+  # simple. cert-manager/Let's Encrypt via IP publica de Azure se descarto
+  # (ver docs/https-qa.md): la cuota de IPs esta agotada y la unica IP
+  # compartida disponible quedo en un estado que no se pudo reparar.
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - ecoruta-qa-app.westus2.cloudapp.azure.com
-      secretName: ecoruta-qa-tls
   rules:
-    - host: ecoruta-qa-app.westus2.cloudapp.azure.com
+    - host: ecoruta-qa.tail47a5f7.ts.net
       http:
         paths:
           - path: /api
