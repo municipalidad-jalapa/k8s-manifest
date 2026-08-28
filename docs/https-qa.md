@@ -27,6 +27,18 @@ Equipo DevOps del proyecto (Seminario UMG), cuenta de Tailscale con correo
 `qa/tailscale-funnel.yaml` (Deployment + PVC de estado + config de Serve),
 `qa/backend-ingress.yaml`, `qa/backend-sse-ingress.yaml`.
 
+La expiración de clave del nodo (`ecoruta-qa`) está **desactivada**
+(`keyExpiryDisabled=true`) — por defecto Tailscale expira la clave de un
+dispositivo a los 6 meses y hay que volver a autenticarlo a mano; con esto
+desactivado no hace falta. Hay un token de API de Tailscale guardado como
+variable de CI/CD (`TAILSCALE_API_TOKEN`, enmascarada) para poder
+consultar el estado de dispositivos/DNS sin entrar a la consola web:
+
+```bash
+curl -H "Authorization: Bearer $TAILSCALE_API_TOKEN" \
+  "https://api.tailscale.com/api/v2/tailnet/-/devices"
+```
+
 **Importante — configuración fuera de este repo, en la cuenta de
 Tailscale:** hubo que agregar un permiso de política (ACL) que no viene
 por defecto, desde **console.tailscale.com → Policies → JSON editor**:
