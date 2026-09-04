@@ -59,9 +59,10 @@ apply-qa:
     - kubectl apply -f qa/
   rules:
     # $CI_PIPELINE_SOURCE != "schedule": sin esto, cada pipeline programado
-    # (respaldos, prender/apagar produccion) tambien dispara este job, y
-    # falla con un "failed" falso si QA esta apagado en ese momento (QA no
-    # tiene horario fijo, se prende solo cuando alguien lo usa).
+    # (respaldos, prender/apagar clusters) tambien dispara este job, y
+    # falla con un "failed" falso si QA esta apagado en ese momento (QA
+    # sigue el mismo horario 7am-8pm que produccion, pero puede estar
+    # apagado fuera de esa ventana o si alguien lo apago manual).
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
 
 apply-production:
@@ -83,13 +84,14 @@ apply-production:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "schedule"'
 
-production-schedule-toggle:
-  # Prende/apaga produccion segun el horario de operacion (7am-8pm hora de
-  # Guatemala = 13:00-02:00 UTC), para no pagar computo fuera de esas horas.
-  # Un solo job para los dos horarios programados (13:00 y 02:00 UTC): el
-  # proyecto no permite variables por pipeline schedule
-  # (ci_pipeline_variables_minimum_override_role: no_one_allowed), asi que
-  # decide la accion segun la hora UTC actual en vez de una variable.
+clusters-schedule-toggle:
+  # Prende/apaga los DOS clusters (QA y produccion) segun el horario de
+  # operacion (7am-8pm hora de Guatemala = 13:00-02:00 UTC), para no pagar
+  # computo fuera de esas horas. Un solo job para los dos horarios
+  # programados (13:00 y 02:00 UTC): el proyecto no permite variables por
+  # pipeline schedule (ci_pipeline_variables_minimum_override_role:
+  # no_one_allowed), asi que decide la accion segun la hora UTC actual en
+  # vez de una variable.
   stage: apply
   image: mcr.microsoft.com/azure-cli:2.65.0
   script:
@@ -106,17 +108,20 @@ production-schedule-toggle:
       echo "Accion: $ACCION"
     - az login --service-principal -u "$AZURE_SP_APP_ID" -p "$AZURE_SP_PASSWORD" --tenant "$AZURE_SP_TENANT" -o none
     - |
-      if [ "$ACCION" = "start" ]; then
-        for intento in 1 2 3 4 5; do
-          if az aks start -n aks-buses-prod -g rg-buses-jalapa; then
-            break
-          fi
-          echo "Intento $intento fallo (probablemente una operacion en curso), reintentando en 30s..."
-          sleep 30
-        done
-      else
-        az aks stop -n aks-buses-prod -g rg-buses-jalapa --no-wait
-      fi
+      for CLUSTER in aks-buses-dev aks-buses-prod; do
+        echo "--- $CLUSTER ---"
+        if [ "$ACCION" = "start" ]; then
+          for intento in 1 2 3 4 5; do
+            if az aks start -n "$CLUSTER" -g rg-buses-jalapa; then
+              break
+            fi
+            echo "Intento $intento fallo (probablemente una operacion en curso), reintentando en 30s..."
+            sleep 30
+          done
+        else
+          az aks stop -n "$CLUSTER" -g rg-buses-jalapa --no-wait
+        fi
+      done
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
