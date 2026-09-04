@@ -56,6 +56,8 @@ apply-qa:
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
     # SCRUM-309 (HU-137): auth key de Tailscale para exponer QA sin IP publica.
     - kubectl create secret generic tailscale-secret --from-literal=TAILSCALE_AUTH_KEY="$TAILSCALE_AUTH_KEY" -n qa --dry-run=client -o yaml | kubectl apply -f -
+    # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase.
+    - kubectl create secret generic firebase-secret --from-literal=FIREBASE_CREDENTIALS_JSON="$FIREBASE_ADMIN_SDK_JSON" --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" -n qa --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f qa/
   rules:
     # $CI_PIPELINE_SOURCE != "schedule": sin esto, cada pipeline programado
@@ -79,6 +81,8 @@ apply-production:
     - kubectl create secret generic alertmanager-smtp-secret --from-literal=smtp-password="$ALERTMANAGER_SMTP_PASSWORD" -n production --dry-run=client -o yaml | kubectl apply -f -
     # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo (pg_dump).
     - kubectl create secret generic azure-backup-secret --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" -n production --dry-run=client -o yaml | kubectl apply -f -
+    # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase.
+    - kubectl create secret generic firebase-secret --from-literal=FIREBASE_CREDENTIALS_JSON="$FIREBASE_ADMIN_SDK_JSON" --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" -n production --dry-run=client -o yaml | kubectl apply -f -
     - kubectl apply -f production/
   when: manual
   rules:

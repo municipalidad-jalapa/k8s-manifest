@@ -39,6 +39,21 @@ spec:
                 secretKeyRef:
                   name: db-secrets
                   key: JWT_SECRET
+            # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase. Los
+            # nombres coinciden con ecoruta.firebase.credentials-json /
+            # project-id (application.yml) para que el modulo de identidad
+            # (SCRUM-158/HU-63, todavia sin mergear) funcione sin cambios
+            # cuando se apruebe.
+            - name: FIREBASE_CREDENTIALS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: firebase-secret
+                  key: FIREBASE_CREDENTIALS_JSON
+            - name: FIREBASE_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: firebase-secret
+                  key: FIREBASE_PROJECT_ID
           resources:
             requests:
               memory: "384Mi"
