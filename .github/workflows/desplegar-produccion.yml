@@ -1,0 +1,75 @@
+name: Desplegar produccion
+
+# Reemplaza al job apply-production de GitLab CI (que era `when: manual`).
+# Aca el equivalente es el environment `production` con revisores requeridos:
+# se encola solo al mergear, pero no corre hasta que alguien lo aprueba.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "production/**"
+      - ".github/workflows/desplegar-produccion.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: desplegar-produccion
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-22.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login en Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Credenciales de aks-buses-prod
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: rg-buses-jalapa
+          cluster-name: aks-buses-prod
+
+      - name: Crear/actualizar secretos
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ALERTMANAGER_SMTP_PASSWORD: ${{ secrets.ALERTMANAGER_SMTP_PASSWORD }}
+          AZURE_STORAGE_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
+          FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          kubectl create secret generic db-secrets \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            -n production --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-151 (HU-56): contrasena SMTP de Alertmanager, aparte de db-secrets.
+          kubectl create secret generic alertmanager-smtp-secret \
+            --from-literal=smtp-password="$ALERTMANAGER_SMTP_PASSWORD" \
+            -n production --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo.
+          kubectl create secret generic azure-backup-secret \
+            --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" \
+            -n production --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase.
+          kubectl create secret generic firebase-secret \
+            --from-literal=FIREBASE_CREDENTIALS_JSON="$FIREBASE_ADMIN_SDK_JSON" \
+            --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            -n production --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar manifiestos
+        run: kubectl apply -f production/

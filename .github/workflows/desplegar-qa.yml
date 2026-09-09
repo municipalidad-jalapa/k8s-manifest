@@ -1,0 +1,79 @@
+name: Desplegar QA
+
+# Reemplaza al job apply-qa de GitLab CI.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "qa/**"
+      - ".github/workflows/desplegar-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: desplegar-qa
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-22.04
+    environment: qa
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login en Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Credenciales de aks-buses-dev
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: rg-buses-jalapa
+          cluster-name: aks-buses-dev
+
+      # El patron --dry-run=client -o yaml | kubectl apply -f - permite
+      # ACTUALIZAR el Secret si ya existe, en vez de fallar por duplicado.
+      - name: Crear/actualizar secretos
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ECORUTA_ADMIN_TOKEN: ${{ secrets.ECORUTA_ADMIN_TOKEN }}
+          AZURE_STORAGE_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          kubectl create secret generic db-secrets \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=ECORUTA_ADMIN_TOKEN="$ECORUTA_ADMIN_TOKEN" \
+            -n qa --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-163 (HU-68): clave de Azure Blob Storage para el respaldo.
+          kubectl create secret generic azure-backup-secret \
+            --from-literal=AZURE_STORAGE_ACCESS_KEY="$AZURE_STORAGE_ACCESS_KEY" \
+            -n qa --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-309 (HU-137): auth key de Tailscale (QA se expone sin IP publica).
+          kubectl create secret generic tailscale-secret \
+            --from-literal=TAILSCALE_AUTH_KEY="$TAILSCALE_AUTH_KEY" \
+            -n qa --dry-run=client -o yaml | kubectl apply -f -
+
+          # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase. En
+          # GitHub el secreto viaja como JSON crudo: a diferencia de GitLab,
+          # aca si se admiten secretos multilinea (no hace falta base64).
+          kubectl create secret generic firebase-secret \
+            --from-literal=FIREBASE_CREDENTIALS_JSON="$FIREBASE_ADMIN_SDK_JSON" \
+            --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            -n qa --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar manifiestos
+        run: kubectl apply -f qa/

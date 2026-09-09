@@ -1,0 +1,41 @@
+name: Apagar clusters (8pm GT)
+
+# Reemplaza la mitad "stop" del job clusters-schedule-toggle de GitLab CI.
+# Guatemala es UTC-6 fijo: 8pm GT = 02:00 UTC del dia siguiente.
+# Apagar fuera del horario de operacion es lo que baja el costo de computo
+# a la mitad (~USD 25/mes menos entre los dos clusters).
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apagar:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        cluster: [aks-buses-dev, aks-buses-prod]
+      fail-fast: false
+    steps:
+      - name: Login en Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apagar ${{ matrix.cluster }}
+        run: |
+          set -euo pipefail
+          estado=$(az aks show -n "${{ matrix.cluster }}" -g rg-buses-jalapa --query powerState.code -o tsv)
+          if [ "$estado" = "Stopped" ]; then
+            echo "${{ matrix.cluster }} ya esta apagado."
+            exit 0
+          fi
+          az aks stop -n "${{ matrix.cluster }}" -g rg-buses-jalapa --no-wait
+          echo "Apagado solicitado para ${{ matrix.cluster }}."

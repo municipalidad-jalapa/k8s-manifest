@@ -1,0 +1,53 @@
+name: Encender clusters (7am GT)
+
+# Reemplaza la mitad "start" del job clusters-schedule-toggle de GitLab CI.
+# En GitLab era un solo job que decidia start/stop mirando `date -u +%H`,
+# porque el proyecto no permitia variables por pipeline schedule. GitHub no
+# tiene esa limitacion, asi que van dos workflows separados y explicitos.
+#
+# Guatemala es UTC-6 fijo (sin horario de verano): 7am GT = 13:00 UTC.
+
+on:
+  schedule:
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  encender:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        cluster: [aks-buses-dev, aks-buses-prod]
+      fail-fast: false
+    steps:
+      - name: Login en Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Azure rechaza el start si todavia esta asentandose una operacion
+      # previa de stop/start, aunque powerState ya diga lo contrario.
+      - name: Encender ${{ matrix.cluster }}
+        run: |
+          set -euo pipefail
+          estado=$(az aks show -n "${{ matrix.cluster }}" -g rg-buses-jalapa --query powerState.code -o tsv)
+          if [ "$estado" = "Running" ]; then
+            echo "${{ matrix.cluster }} ya esta encendido."
+            exit 0
+          fi
+          for intento in 1 2 3 4 5; do
+            if az aks start -n "${{ matrix.cluster }}" -g rg-buses-jalapa; then
+              echo "Encendido en el intento $intento."
+              exit 0
+            fi
+            echo "Intento $intento fallo (probablemente una operacion en curso), reintento en 30s..."
+            sleep 30
+          done
+          echo "No se pudo encender ${{ matrix.cluster }} tras 5 intentos."
+          exit 1
