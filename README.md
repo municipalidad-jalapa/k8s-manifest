@@ -10,8 +10,13 @@ Manifiestos de Kubernetes y automatización de despliegue de EcoRuta
 | QA | `aks-buses-dev` | `qa` | https://ecoruta-qa.tail47a5f7.ts.net (Tailscale Funnel) |
 | Producción | `aks-buses-prod` | `production` | IP pública de Azure, sin dominio ni HTTPS todavía |
 
-Ambos clusters se **apagan fuera del horario de operación** (7am–8pm hora de
-Guatemala) para no pagar cómputo ocioso: ~USD 25/mes menos entre los dos.
+Ambos clusters se **apagan fuera del horario de operación** (9pm–11pm hora de
+Guatemala, 2 horas al día) para no pagar cómputo ocioso.
+
+Si necesitás los clusters fuera de esa ventana, corré el workflow
+**Encender clusters** a mano desde la pestaña Actions, y acordate de apagarlos
+después con **Apagar clusters** (si no, quedan encendidos hasta las 11pm del
+día siguiente).
 
 ## Workflows (GitHub Actions)
 
@@ -20,9 +25,9 @@ Guatemala) para no pagar cómputo ocioso: ~USD 25/mes menos entre los dos.
 | `validar-manifiestos.yml` | PR que toca `qa/` o `production/` | `kubectl apply --dry-run` de ambos entornos |
 | `desplegar-qa.yml` | Push a `main` que toca `qa/` | Crea los Secrets y aplica `qa/` |
 | `desplegar-produccion.yml` | Push a `main` que toca `production/` | Igual, en producción. **Requiere aprobación** (environment `production`) |
-| `encender-clusters.yml` | 13:00 UTC (7am GT) | Enciende los dos clusters |
-| `apagar-clusters.yml` | 02:00 UTC (8pm GT) | Apaga los dos clusters |
-| `respaldo-programado.yml` | 03:00 UTC | Respaldo de Postgres de ambos entornos, encendiendo el cluster si hace falta |
+| `encender-clusters.yml` | 03:00 UTC (9pm GT) | Enciende los dos clusters |
+| `apagar-clusters.yml` | 05:00 UTC (11pm GT) | Apaga los dos clusters |
+| `respaldo-programado.yml` | 04:00 UTC (10pm GT) | Respaldo de Postgres de ambos entornos. Corre **dentro** de la ventana a propósito: si corriera fuera, encendería el cluster y lo volvería a apagar al terminar |
 
 Todos se pueden disparar a mano desde la pestaña **Actions** (`workflow_dispatch`).
 

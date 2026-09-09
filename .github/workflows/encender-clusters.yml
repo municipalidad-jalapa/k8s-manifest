@@ -1,15 +1,16 @@
-name: Encender clusters (7am GT)
+name: Encender clusters (9pm GT)
 
 # Reemplaza la mitad "start" del job clusters-schedule-toggle de GitLab CI.
 # En GitLab era un solo job que decidia start/stop mirando `date -u +%H`,
 # porque el proyecto no permitia variables por pipeline schedule. GitHub no
 # tiene esa limitacion, asi que van dos workflows separados y explicitos.
 #
-# Guatemala es UTC-6 fijo (sin horario de verano): 7am GT = 13:00 UTC.
+# Guatemala es UTC-6 fijo (sin horario de verano): 9pm GT = 03:00 UTC
+# del dia siguiente.
 
 on:
   schedule:
-    - cron: "0 13 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:

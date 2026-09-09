@@ -1,13 +1,13 @@
-name: Apagar clusters (8pm GT)
+name: Apagar clusters (11pm GT)
 
 # Reemplaza la mitad "stop" del job clusters-schedule-toggle de GitLab CI.
-# Guatemala es UTC-6 fijo: 8pm GT = 02:00 UTC del dia siguiente.
-# Apagar fuera del horario de operacion es lo que baja el costo de computo
-# a la mitad (~USD 25/mes menos entre los dos clusters).
+# Guatemala es UTC-6 fijo: 11pm GT = 05:00 UTC del dia siguiente.
+# La ventana de operacion es de 9pm a 11pm GT (2 horas al dia): apagar el
+# resto del tiempo es lo que mantiene bajo el costo de computo.
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 5 * * *"
   workflow_dispatch:
 
 permissions:
