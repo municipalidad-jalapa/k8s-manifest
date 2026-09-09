@@ -40,8 +40,9 @@ az storage blob download \
 Verificar el namespace (`qa` o `production`) antes de correr esto.
 
 ```bash
-# Conectarse al cluster correcto primero (contexto del GitLab Agent o
-# az aks get-credentials, segun como se esté trabajando).
+# Conectarse al cluster correcto primero:
+#   az aks get-credentials -g rg-buses-jalapa -n aks-buses-dev    # QA
+#   az aks get-credentials -g rg-buses-jalapa -n aks-buses-prod   # produccion
 
 # Copiar el archivo al pod:
 kubectl cp ./ecoruta-restaurar.sql.gz qa/postgres-0:/tmp/ecoruta-restaurar.sql.gz
