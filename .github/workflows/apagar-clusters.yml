@@ -1,13 +1,19 @@
-name: Apagar clusters (11pm GT)
+name: Apagar clusters (cierra ventana 11pm GT)
 
 # Reemplaza la mitad "stop" del job clusters-schedule-toggle de GitLab CI.
 # Guatemala es UTC-6 fijo: 11pm GT = 05:00 UTC del dia siguiente.
+#
+# El cron dispara a las 05:20 UTC (11:20pm GT), un poco DESPUES del cierre
+# nominal y fuera de la hora en punto. Apagar tarde cuesta centavos;
+# apagar temprano recorta la ventana. Ademas deja ~70 minutos de
+# separacion con el respaldo de las 10:10pm, para que un retraso de
+# GitHub no haga que el apagado mate el Job de respaldo a medio correr.
 # La ventana de operacion es de 9pm a 11pm GT (2 horas al dia): apagar el
 # resto del tiempo es lo que mantiene bajo el costo de computo.
 
 on:
   schedule:
-    - cron: "0 5 * * *"
+    - cron: "20 5 * * *"
   workflow_dispatch:
 
 permissions:
