@@ -1,4 +1,4 @@
-name: Encender clusters (9pm GT)
+name: Encender clusters (abre ventana 9pm GT)
 
 # Reemplaza la mitad "start" del job clusters-schedule-toggle de GitLab CI.
 # En GitLab era un solo job que decidia start/stop mirando `date -u +%H`,
@@ -7,10 +7,19 @@ name: Encender clusters (9pm GT)
 #
 # Guatemala es UTC-6 fijo (sin horario de verano): 9pm GT = 03:00 UTC
 # del dia siguiente.
+#
+# Pero el cron dispara a las 02:35 UTC (8:35pm GT), 25 minutos ANTES de
+# que abra la ventana, a proposito. El evento `schedule` de GitHub es de
+# mejor esfuerzo: se retrasa cuando hay carga y a veces se descarta. La
+# hora en punto es la franja mas congestionada, asi que ademas se corre
+# al minuto 35. Con una ventana de solo 2 horas, un retraso de 40 min se
+# come un tercio de la noche; adelantarlo cuesta ~1 USD al mes y compra
+# ese margen. El cluster tarda unos minutos en quedar utilizable de todas
+# formas, asi que el adelanto no se desperdicia.
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "35 2 * * *"
   workflow_dispatch:
 
 permissions:
