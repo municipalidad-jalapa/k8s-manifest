@@ -8,14 +8,15 @@ name: Respaldo programado de Postgres
 # corre siempre (vive fuera del cluster), lo prende si hace falta, dispara
 # el Job a demanda, y lo vuelve a apagar solo si el fue quien lo prendio.
 
-# Corre a las 04:00 UTC = 10pm GT, a proposito DENTRO de la ventana de
-# operacion (9pm-11pm GT). Si corriera a la misma hora que el encendido,
+# Corre a las 04:10 UTC = 10:10pm GT, a proposito DENTRO de la ventana de
+# operacion (9pm-11pm GT) y fuera de la hora en punto, que es cuando mas
+# se retrasan los schedules de GitHub. Si corriera a la misma hora que el encendido,
 # ambos pelearian por el `az aks start` y, peor, este workflow veria el
 # cluster como "estaba apagado" y lo apagaria al terminar, matando la
 # ventana. Corriendo adentro, lo encuentra encendido y no lo toca.
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "10 4 * * *"
   workflow_dispatch:
 
 permissions:
