@@ -19,7 +19,7 @@ name: Encender clusters (abre ventana 9pm GT)
 
 on:
   schedule:
-    - cron: "0 13 * * *"
+    - cron: "0 13 12 9 *"
   workflow_dispatch:
 
 permissions:
