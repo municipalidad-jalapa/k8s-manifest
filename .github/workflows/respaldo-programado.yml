@@ -16,7 +16,7 @@ name: Respaldo programado de Postgres
 # ventana. Corriendo adentro, lo encuentra encendido y no lo toca.
 on:
   schedule:
-    - cron: "10 4 * * *"
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions:
