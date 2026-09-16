@@ -13,7 +13,7 @@ name: Apagar clusters (cierra ventana 11pm GT)
 
 on:
   schedule:
-    - cron: "20 5 * * *"
+    - cron: "0 5 * * *"
   workflow_dispatch:
 
 permissions:
