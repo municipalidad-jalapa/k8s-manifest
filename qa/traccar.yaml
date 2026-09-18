@@ -1,0 +1,122 @@
+# Traccar (HU-141) — recibe el protocolo propio del rastreador TK103A/B.
+#
+# El GPS TK103A habla el protocolo "gps103" por TCP; el endpoint HTTP de EcoRuta
+# no lo entiende. Traccar traduce esas tramas a posiciones y las deja consultables.
+# Autohospedado, gratuito, comparte el clúster de EcoRuta (no requiere máquina
+# aparte ni software en el bus). Se levanta solo tras un reinicio del nodo (es un
+# Deployment) y conserva los datos en un volumen persistente.
+# ---------- Configuración ----------
+# Extiende la config por defecto de Traccar (que trae todos los protocolos y sus
+# puertos, incluido gps103 en 5001) y sólo agrega el auto-registro de dispositivos:
+# el equipo a bordo puede reportar y Traccar lo da de alta al ver su identificador
+# por primera vez, sin registro manual previo. Práctico para QA; en producción se
+# apagaría para no aceptar dispositivos desconocidos.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traccar-config
+  namespace: qa
+data:
+  traccar.xml: |
+    <?xml version='1.0' encoding='UTF-8'?>
+    <!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+    <properties>
+      <entry key='config.default'>./conf/default.xml</entry>
+      <entry key='database.registerUnknown'>true</entry>
+    </properties>
+---
+# ---------- Almacenamiento persistente ----------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: traccar-data
+  namespace: qa
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: managed-csi
+  resources:
+    requests:
+      storage: 2Gi
+---
+# ---------- Traccar ----------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traccar
+  namespace: qa
+spec:
+  replicas: 1
+  # Una sola instancia sobre un volumen ReadWriteOnce: no se puede solapar
+  # el pod nuevo con el viejo, hay que apagar y volver a montar.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: traccar
+  template:
+    metadata:
+      labels:
+        app: traccar
+    spec:
+      containers:
+        - name: traccar
+          # TODO: fijar una versión exacta (p. ej. 6.x) una vez validada.
+          image: traccar/traccar:latest
+          ports:
+            - containerPort: 8082
+              name: web
+            - containerPort: 5001
+              name: gps103
+              protocol: TCP
+          volumeMounts:
+            # La base H2 y los datos de Traccar viven acá; el volumen los conserva.
+            - name: data
+              mountPath: /opt/traccar/data
+            # Config propia sobre la por defecto (auto-registro).
+            - name: config
+              mountPath: /opt/traccar/conf/traccar.xml
+              subPath: traccar.xml
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8082
+            initialDelaySeconds: 40
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: traccar-data
+        - name: config
+          configMap:
+            name: traccar-config
+---
+# ---------- Exposición ----------
+# El GPS reporta por TCP a una IP pública en el puerto del protocolo (5001).
+# Por eso el Service es LoadBalancer (asigna IP pública de Azure). El 8082 es la
+# consola web de Traccar, donde se dan de alta dispositivos y se ven posiciones.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traccar
+  namespace: qa
+spec:
+  type: LoadBalancer
+  selector:
+    app: traccar
+  ports:
+    - name: web
+      port: 8082
+      targetPort: 8082
+      protocol: TCP
+    - name: gps103
+      port: 5001
+      targetPort: 5001
+      protocol: TCP
