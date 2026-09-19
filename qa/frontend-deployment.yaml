@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend-app-buses
-          image: acrbusesjalapa.azurecr.io/frontend-app-buses:latest
+          image: acrbusesjalapa.azurecr.io/frontend-app-buses:2455ff39
           ports:
             - containerPort: 80
           volumeMounts:
