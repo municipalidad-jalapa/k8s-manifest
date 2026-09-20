@@ -1,0 +1,232 @@
+# Observabilidad E2E (SCRUM-19 / Devops-96) — Grafana (panel) + Loki (retencion
+# de logs) + Promtail (recoleccion). Complementa Prometheus/Alertmanager que ya
+# existen. Namespace production. El panel se sirve en grafana.mibusjalapa.lat.
+#
+# Requisitos: (1) el backend debe permitir el scrape de /actuator/prometheus
+# (cambio en SecurityConfig, ver commit aparte); (2) DNS A grafana -> 20.83.88.147.
+---
+# ---------------- Loki (almacen de logs, con retencion) ----------------
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: loki-config, namespace: production }
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server: { http_listen_port: 3100 }
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage: { filesystem: { chunks_directory: /loki/chunks, rules_directory: /loki/rules } }
+      replication_factor: 1
+      ring: { kvstore: { store: inmemory } }
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index: { prefix: index_, period: 24h }
+    limits_config:
+      retention_period: 168h   # 7 dias: cubre "investigar el incidente del dia anterior"
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: loki-data, namespace: production }
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: managed-csi
+  resources: { requests: { storage: 5Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: loki, namespace: production }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: loki } }
+  template:
+    metadata: { labels: { app: loki } }
+    spec:
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: loki
+          image: grafana/loki:3.1.1
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          ports: [{ containerPort: 3100 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki }
+            - { name: data, mountPath: /loki }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+      volumes:
+        - { name: config, configMap: { name: loki-config } }
+        - { name: data, persistentVolumeClaim: { claimName: loki-data } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: loki, namespace: production }
+spec:
+  selector: { app: loki }
+  ports: [{ port: 3100, targetPort: 3100 }]
+---
+# ---------------- Promtail (recoleccion de logs de los pods) ----------------
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: promtail, namespace: production }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: promtail-production }
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: promtail-production }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: promtail-production }
+subjects: [{ kind: ServiceAccount, name: promtail, namespace: production }]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: promtail-config, namespace: production }
+data:
+  promtail.yaml: |
+    server: { http_listen_port: 9080 }
+    clients: [{ url: http://loki:3100/loki/api/v1/push }]
+    positions: { filename: /run/promtail/positions.yaml }
+    scrape_configs:
+      - job_name: pods
+        kubernetes_sd_configs: [{ role: pod }]
+        pipeline_stages: [{ cri: {} }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            separator: /
+            target_label: __path__
+            replacement: /var/log/pods/*$1/*.log
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: { name: promtail, namespace: production }
+spec:
+  selector: { matchLabels: { app: promtail } }
+  template:
+    metadata: { labels: { app: promtail } }
+    spec:
+      serviceAccountName: promtail
+      containers:
+        - name: promtail
+          image: grafana/promtail:3.1.1
+          args: ["-config.file=/etc/promtail/promtail.yaml"]
+          volumeMounts:
+            - { name: config, mountPath: /etc/promtail }
+            - { name: run, mountPath: /run/promtail }
+            - { name: pods, mountPath: /var/log/pods, readOnly: true }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { memory: 128Mi } }
+      volumes:
+        - { name: config, configMap: { name: promtail-config } }
+        - { name: run, emptyDir: {} }
+        - { name: pods, hostPath: { path: /var/log/pods } }
+---
+# ---------------- Grafana (el panel) ----------------
+apiVersion: v1
+kind: Secret
+metadata: { name: grafana-admin, namespace: production }
+type: Opaque
+stringData:
+  # Cambiar tras el primer ingreso.
+  admin-password: "EcoRuta_Grafana_2026!"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-datasources, namespace: production }
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - { name: Prometheus, type: prometheus, access: proxy, url: http://prometheus:9090, isDefault: true }
+      - { name: Loki, type: loki, access: proxy, url: http://loki:3100 }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-dashboards-provider, namespace: production }
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - { name: ecoruta, folder: EcoRuta, type: file, options: { path: /var/lib/grafana/dashboards } }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-dashboard-ecoruta, namespace: production }
+data:
+  ecoruta.json: |
+    {"title":"EcoRuta — Operacion","timezone":"America/Guatemala","schemaVersion":39,"time":{"from":"now-6h","to":"now"},"panels":[
+      {"id":1,"title":"Backend up","type":"stat","gridPos":{"h":4,"w":6,"x":0,"y":0},"targets":[{"expr":"up{job=\"backend\"}"}]},
+      {"id":2,"title":"Edad ultima telemetria (s)","type":"stat","gridPos":{"h":4,"w":6,"x":6,"y":0},"targets":[{"expr":"time()-ecoruta_telemetria_ultima_recepcion_timestamp_seconds"}]},
+      {"id":3,"title":"Requests/s por estado","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"sum by (status) (rate(http_server_requests_seconds_count[5m]))"}]},
+      {"id":4,"title":"5xx/s","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":4},"targets":[{"expr":"sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]))"}]},
+      {"id":5,"title":"Memoria JVM (heap usada)","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"jvm_memory_used_bytes{area=\"heap\"}"}]},
+      {"id":6,"title":"Logs del backend (Loki)","type":"logs","gridPos":{"h":8,"w":24,"x":0,"y":16},"datasource":{"type":"loki"},"targets":[{"expr":"{namespace=\"production\", app=\"backend-api-buses\"}"}]}
+    ]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: grafana, namespace: production }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata: { labels: { app: grafana } }
+    spec:
+      securityContext: { fsGroup: 472 }
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.2.0
+          ports: [{ containerPort: 3000 }]
+          env:
+            - { name: GF_SECURITY_ADMIN_USER, value: admin }
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: grafana-admin, key: admin-password } }
+            - { name: GF_SERVER_ROOT_URL, value: "https://grafana.mibusjalapa.lat" }
+          volumeMounts:
+            - { name: datasources, mountPath: /etc/grafana/provisioning/datasources }
+            - { name: dash-provider, mountPath: /etc/grafana/provisioning/dashboards }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 512Mi } }
+      volumes:
+        - { name: datasources, configMap: { name: grafana-datasources } }
+        - { name: dash-provider, configMap: { name: grafana-dashboards-provider } }
+        - { name: dashboards, configMap: { name: grafana-dashboard-ecoruta } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: grafana, namespace: production }
+spec:
+  selector: { app: grafana }
+  ports: [{ port: 3000, targetPort: 3000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: production
+  annotations: { cert-manager.io/cluster-issuer: letsencrypt-prod }
+spec:
+  ingressClassName: nginx
+  tls: [{ hosts: [grafana.mibusjalapa.lat], secretName: grafana-mibusjalapa-tls }]
+  rules:
+    - host: grafana.mibusjalapa.lat
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: grafana, port: { number: 3000 } } } }
