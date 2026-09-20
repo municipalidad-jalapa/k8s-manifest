@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend-api-buses
-          image: acrbusesjalapa.azurecr.io/backend-api-buses:latest
+          image: acrbusesjalapa.azurecr.io/backend-api-buses:d3a4571a
           ports:
             - containerPort: 8080
           env:
