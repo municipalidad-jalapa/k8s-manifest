@@ -111,6 +111,11 @@ kind: Service
 metadata:
   name: traccar
   namespace: qa
+  annotations:
+    # IP publica estatica (pip-traccar-gps en el nodeRG) para que el GPS y la
+    # consola tengan un endpoint fijo -> DNS gps.mibusjalapa.lat. No cambia al
+    # reiniciar el cluster (a diferencia de la IP dinamica del LoadBalancer).
+    service.beta.kubernetes.io/azure-load-balancer-ipv4: "20.114.56.168"
 spec:
   type: LoadBalancer
   selector:
