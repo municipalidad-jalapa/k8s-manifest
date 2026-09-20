@@ -62,6 +62,10 @@ spec:
                 secretKeyRef:
                   name: firebase-secret
                   key: FIREBASE_PROJECT_ID
+            # HU Desarrollo-95 / ADR-002: en QA se necesita mas margen para
+            # reservar sin estar fisicamente cerca de la parada.
+            - name: DEMANDA_GEOCERCA_METROS
+              value: "50000"
           resources:
             requests:
               memory: "384Mi"
