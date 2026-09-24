@@ -18,10 +18,6 @@ spec:
           image: acrbusesjalapa.azurecr.io/frontend-app-buses:747f7bd7
           ports:
             - containerPort: 80
-          volumeMounts:
-            - name: config-volume
-              mountPath: /usr/share/nginx/html/config.js
-              subPath: config.js
           resources:
             requests:
               memory: "32Mi"
@@ -41,10 +37,6 @@ spec:
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 5
-      volumes:
-        - name: config-volume
-          configMap:
-            name: frontend-config
 ---
 apiVersion: v1
 kind: Service
