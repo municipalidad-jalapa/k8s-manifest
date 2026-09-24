@@ -5,13 +5,19 @@ y cómo se traspasa a quien lo opere.
 
 ## 1. Costos recurrentes (detalle mensual)
 
+> **Costo real (Azure Cost Management, sep‑2026, toda la suscripción = el proyecto):**
+> **US$42.95 a la fecha (día 24)**, con **previsión de ~US$56.92 para el mes completo**
+> (≈ **Q440–450/mes** a ~7.8 GTQ/USD). Patrón diario: base ~US$1/día con picos de
+> hasta ~US$4/día en los días de más actividad. Es el gasto de **toda la infra
+> (QA + Producción) ya con el apagado nocturno**; sin el scheduler sería varias
+> veces más. Se consulta en el portal → *Análisis de costos* (ámbito de la
+> suscripción), vista *AccumulatedCosts*.
+
 > **Corrección importante:** la base de datos **no** es "Azure Database for
 > PostgreSQL" (como asumía la HU). Corre **dentro del clúster** (Deployment
 > `postgres` + disco administrado por PVC), tanto en QA como en Producción. Por
 > eso **no hay una línea de DB gestionada aparte**: su costo va en el cómputo AKS
-> + el disco PVC. Las cifras exactas en Q/USD se leen en **Azure Cost Management**
-> (portal → Cost Management + Billing, o `az consumption usage list` sobre
-> `rg-buses-jalapa`); abajo el desglose por ítem y su driver.
+> + el disco PVC. El desglose por ítem y su driver, abajo.
 
 | Ítem | Driver del costo | Control / nota |
 |---|---|---|
