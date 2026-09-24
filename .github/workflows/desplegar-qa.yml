@@ -49,6 +49,7 @@ jobs:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
           FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          TRACCAR_TOKEN: ${{ secrets.TRACCAR_TOKEN }}
         run: |
           set -euo pipefail
           kubectl create secret generic db-secrets \
@@ -75,5 +76,21 @@ jobs:
             --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
             -n qa --dry-run=client -o yaml | kubectl apply -f -
 
+          # SCRUM-24: secreto de integracion de Traccar (X-Traccar-Token). Lo
+          # usa el backend (valueFrom) y el forward de Traccar (envsubst abajo).
+          kubectl create secret generic traccar-secret \
+            --from-literal=token="$TRACCAR_TOKEN" \
+            -n qa --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Aplicar manifiestos
-        run: kubectl apply -f qa/
+        env:
+          TRACCAR_TOKEN: ${{ secrets.TRACCAR_TOKEN }}
+        run: |
+          set -euo pipefail
+          # El ConfigMap de Traccar lleva el token en forward.header; se inyecta
+          # aca con envsubst para no versionarlo en claro. El resto de qa/ se
+          # aplica sin cambios. Solo se sustituye ${TRACCAR_TOKEN}.
+          mkdir -p /tmp/qa-render
+          cp qa/*.yaml /tmp/qa-render/
+          envsubst '${TRACCAR_TOKEN}' < qa/traccar.yaml > /tmp/qa-render/traccar.yaml
+          kubectl apply -f /tmp/qa-render/

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend-api-buses
-          image: acrbusesjalapa.azurecr.io/backend-api-buses:d3a4571a
+          image: acrbusesjalapa.azurecr.io/backend-api-buses:ca313ace
           ports:
             - containerPort: 8080
           env:
@@ -66,6 +66,14 @@ spec:
             # reservar sin estar fisicamente cerca de la parada.
             - name: DEMANDA_GEOCERCA_METROS
               value: "50000"
+            # SCRUM-24: secreto de integracion que Traccar envia en X-Traccar-Token.
+            # Vive en el Secret traccar-secret (lo crea desplegar-qa desde el
+            # GitHub Secret TRACCAR_TOKEN); nunca se versiona en el repo.
+            - name: TRACCAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: traccar-secret
+                  key: token
           resources:
             requests:
               memory: "384Mi"

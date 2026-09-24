@@ -27,6 +27,13 @@ data:
       <entry key='database.user'>sa</entry>
       <entry key='database.password'></entry>
       <entry key='database.registerUnknown'>true</entry>
+      <!-- SCRUM-24: reenvio de posiciones al backend. El token NO se versiona:
+           desplegar-qa.yml sustituye ${TRACCAR_TOKEN} (desde el GitHub Secret)
+           con envsubst antes de aplicar este manifiesto. -->
+      <entry key='forward.enable'>true</entry>
+      <entry key='forward.url'>http://backend-api-buses.qa.svc.cluster.local/api/v1/integraciones/traccar/posiciones</entry>
+      <entry key='forward.header'>X-Traccar-Token: ${TRACCAR_TOKEN}</entry>
+      <entry key='forward.type'>json</entry>
     </properties>
 ---
 # ---------- Almacenamiento persistente ----------
