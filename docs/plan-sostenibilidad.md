@@ -3,15 +3,43 @@
 Cómo se mantiene EcoRuta vivo y a bajo costo después de la entrega del Seminario,
 y cómo se traspasa a quien lo opere.
 
-## 1. Costos recurrentes
+## 1. Costos recurrentes (detalle mensual)
 
-| Ítem | Costo aprox. | Cómo se controla |
+> **Corrección importante:** la base de datos **no** es "Azure Database for
+> PostgreSQL" (como asumía la HU). Corre **dentro del clúster** (Deployment
+> `postgres` + disco administrado por PVC), tanto en QA como en Producción. Por
+> eso **no hay una línea de DB gestionada aparte**: su costo va en el cómputo AKS
+> + el disco PVC. Las cifras exactas en Q/USD se leen en **Azure Cost Management**
+> (portal → Cost Management + Billing, o `az consumption usage list` sobre
+> `rg-buses-jalapa`); abajo el desglose por ítem y su driver.
+
+| Ítem | Driver del costo | Control / nota |
 |---|---|---|
-| **Cómputo AKS** (2 clústeres) | El grueso del gasto | **Se apagan 11pm–9pm GT** (solo ~2h/día encendidos) vía Azure Automation → ahorro grande |
-| **Dominio** `mibusjalapa.lat` | ~$1.80 año 1 / **~$40.98 renovación** | Auto-renovación **APAGADA**: vence al año si no se renueva a propósito |
-| **Certificados TLS** | **Gratis** | Let's Encrypt, renovación automática por cert-manager |
-| **Blob Storage** (respaldos) | Bajo | Retención por política de ciclo de vida del storage account |
+| **AKS – nodos QA** (`aks-buses-dev`) | horas encendido × VM del nodepool | Scheduler los apaga 11pm–9pm GT (~2 h/día) |
+| **AKS – nodos Producción** (`aks-buses-prod`) | horas encendido × VM del nodepool | Igual scheduler; **el grueso del gasto** |
+| **PostgreSQL QA y Prod (in-cluster)** | cómputo del pod (dentro de AKS) + disco PVC | No es DB gestionada; sin línea aparte |
+| **Discos administrados (PVC)** | GB aprovisionados (postgres, traccar, loki) | Tamaños chicos; vigilar retención de Loki |
+| **Blob Storage** (respaldos) | GB de dumps almacenados | Política de ciclo de vida del storage |
+| **Dominio** `mibusjalapa.lat` | ~$1.80 año 1 / **~$40.98 renovación** (~$3.4/mes amortizado) | Auto-renovación **APAGADA** |
+| **Certificados TLS** | **$0** | Let's Encrypt + cert-manager |
+| **Firebase** | Plan Spark (gratis) en el uso actual | Vigilar cuotas si crece |
 | **Suscripción Azure** | umgseminario0@outlook.com ("Azure subscription 1") | — |
+
+### Escenarios según la frecuencia de refresco del ETA
+
+El refresco del ETA afecta el cómputo del backend y el tráfico SSE, **no** agrega
+infraestructura (corre en el pod existente). Se ajusta en `application.yml`
+(`ecoruta.eta.intervalo-minimo-recalculo-segundos` y la telemetría SSE):
+
+| Escenario | Refresco | Impacto | Cuándo |
+|---|---|---|---|
+| **Alto** | recalcular ~cada 10 s (actual) | Más CPU del backend y más eventos SSE; sin costo extra de infra mientras el clúster ya está encendido | Operación normal en horario de servicio |
+| **Medio** | ~cada 30 s | ~⅓ del cómputo de recálculo; ETA algo menos "en vivo" | Si el backend queda ajustado de CPU |
+| **Bajo** | ~cada 60 s o más | Cómputo mínimo; ETA notoriamente rezagado | Pruebas o presupuesto muy ajustado |
+
+Como los clústeres solo están encendidos ~2 h/día por el scheduler, el ETA **no**
+genera costo fuera de esa ventana: la palanca real de ahorro es el **horario de
+encendido**, no la frecuencia del ETA.
 
 ## 2. Renovaciones y vencimientos (calendario)
 

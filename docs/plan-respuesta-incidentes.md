@@ -41,12 +41,28 @@ aprender del incidente. Complementa el runbook del Manual de Operación (§7).
 | Base corrupta / pérdida | Restaurar respaldo nocturno desde Blob Storage |
 | Clúster no responde | Encenderlo (`az aks start`); su DNS vuelve en minutos |
 
-## 6. Post-mortem (tras cada S1)
+## 6. Acciones que el conductor puede tomar por sí solo
+
+Delimitado a propósito: el conductor **no** toca servidores, credenciales ni la
+configuración del GPS. Solo lo que puede resolver desde la unidad:
+
+- **La app no carga o no actualiza:** cerrar y reabrir la app; verificar señal /
+  datos móviles del dispositivo a bordo y reintentar.
+- **No aparece la ubicación del bus:** confirmar que el equipo GPS esté encendido
+  y con luz de señal; esperar 1–2 min a que reporte.
+- **El dispositivo a bordo se colgó:** reiniciarlo (apagar/encender) y reabrir la app.
+- **Sigue sin funcionar tras lo anterior:** avisar al on-call de DevOps con: hora,
+  qué ve en pantalla, número de unidad/ruta y si hay señal. No seguir intentando arreglos.
+
+**Lo que el conductor NO debe hacer:** reconfigurar el GPS, cambiar credenciales,
+ni intervenir la infraestructura o los servidores (eso es del on-call).
+
+## 7. Post-mortem (tras cada S1)
 
 Breve, sin culpas: **qué pasó**, **impacto** (tiempo, usuarios), **causa raíz**,
 **cómo se resolvió**, **qué hacer para que no se repita** (acción con responsable).
 
-## 7. Respaldo del propio plan
+## 8. Respaldo del propio plan
 
 Backups nocturnos automáticos (10:10pm GT) + IP estática del GPS + TLS con
 renovación automática reducen la probabilidad de varios S1. Revisar trimestralmente
