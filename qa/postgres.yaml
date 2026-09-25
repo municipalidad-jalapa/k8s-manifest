@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgis/postgis:16-3.4
+          image: pgrouting/pgrouting:16-3.4-3.6.1
           ports:
             - containerPort: 5432
               name: postgres
