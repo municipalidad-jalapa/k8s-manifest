@@ -72,8 +72,9 @@ spec:
     spec:
       containers:
         - name: traccar
-          # TODO: fijar una versión exacta (p. ej. 6.x) una vez validada.
-          image: traccar/traccar:latest
+          # Version fija (la validada en QA). Con :latest un reinicio podia traer
+          # una version nueva sin probar. Actualizar a proposito, probando en QA.
+          image: traccar/traccar:6.15.3
           ports:
             - containerPort: 8082
               name: web
