@@ -72,4 +72,20 @@ jobs:
             -n production --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Aplicar manifiestos
-        run: kubectl apply -f production/
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/prod-render
+          cp production/*.yaml /tmp/prod-render/
+          # Las imagenes de backend y frontend las despliega el workflow de cada
+          # app (tag por SHA). Se conserva la que esta viva en el cluster para que
+          # este apply no la cambie (el manifiesto del backend dice :latest, que
+          # cualquier build pisa). La del manifiesto solo se usa si el Deployment
+          # todavia no existe.
+          for app in backend-api-buses frontend-app-buses; do
+            vivo=$(kubectl get deploy "$app" -n production -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+            if [ -n "$vivo" ]; then
+              sed -i "s#acrbusesjalapa.azurecr.io/${app}:[A-Za-z0-9._-]*#${vivo}#" /tmp/prod-render/*.yaml
+              echo "Conservando imagen viva de $app: $vivo"
+            fi
+          done
+          kubectl apply -f /tmp/prod-render/
