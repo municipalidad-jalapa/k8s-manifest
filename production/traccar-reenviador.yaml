@@ -1,0 +1,101 @@
+# Reenviador de posiciones GPS (nginx con el modulo mirror).
+#
+# Traccar manda cada posicion aqui. El reenviador la entrega al backend de
+# PRODUCCION (respuesta que ve Traccar) y manda una COPIA al backend de QA por
+# su dominio publico. Si QA esta apagado o falla, la copia se pierde sin
+# afectar a produccion: QA ve el GPS siempre que prod este encendido.
+#
+# Tokens: produccion usa el X-Traccar-Token que ya trae Traccar; la copia a QA
+# lo reemplaza por el token de QA (${TRACCAR_TOKEN_QA}, inyectado con envsubst
+# en desplegar-produccion.yml; nunca se versiona). Solo se sustituye esa
+# variable: las variables propias de nginx ($qa_host) quedan intactas.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traccar-reenviador-config
+  namespace: production
+data:
+  default.conf: |
+    # DNS del cluster: resuelve el dominio de QA en cada peticion (si QA
+    # cambia de IP o no resuelve, nginx igual arranca).
+    resolver 10.0.0.10 valid=60s ipv6=off;
+
+    server {
+      listen 80;
+
+      location = /posiciones {
+        mirror /copia-qa;
+        mirror_request_body on;
+        proxy_pass http://backend-api-buses.production.svc.cluster.local/api/v1/integraciones/traccar/posiciones;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 15s;
+      }
+
+      location = /copia-qa {
+        internal;
+        set $qa_host qa.mibusjalapa.lat;
+        proxy_pass https://$qa_host/api/v1/integraciones/traccar/posiciones;
+        proxy_set_header Host qa.mibusjalapa.lat;
+        proxy_set_header X-Traccar-Token "${TRACCAR_TOKEN_QA}";
+        proxy_ssl_server_name on;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 5s;
+      }
+
+      location = /salud {
+        return 200 "ok\n";
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traccar-reenviador
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traccar-reenviador
+  template:
+    metadata:
+      labels:
+        app: traccar-reenviador
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /salud
+              port: 80
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: traccar-reenviador-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traccar-reenviador
+  namespace: production
+spec:
+  selector:
+    app: traccar-reenviador
+  ports:
+    - port: 80
+      targetPort: 80

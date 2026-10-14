@@ -48,6 +48,7 @@ jobs:
           AZURE_STORAGE_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
           FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          TRACCAR_TOKEN: ${{ secrets.TRACCAR_TOKEN }}
         run: |
           set -euo pipefail
           kubectl create secret generic db-secrets \
@@ -71,11 +72,24 @@ jobs:
             --from-literal=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
             -n production --dry-run=client -o yaml | kubectl apply -f -
 
+          # SCRUM-24: secreto de integracion de Traccar (X-Traccar-Token). Lo
+          # usa el backend (valueFrom) y el forward de Traccar (envsubst abajo).
+          kubectl create secret generic traccar-secret \
+            --from-literal=token="$TRACCAR_TOKEN" \
+            -n production --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Aplicar manifiestos
+        env:
+          TRACCAR_TOKEN: ${{ secrets.TRACCAR_TOKEN }}
+          TRACCAR_TOKEN_QA: ${{ secrets.TRACCAR_TOKEN_QA }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/prod-render
           cp production/*.yaml /tmp/prod-render/
+          # Los tokens de Traccar no se versionan: se inyectan con envsubst,
+          # limitado a esas variables para no tocar las de nginx ($qa_host).
+          envsubst '${TRACCAR_TOKEN}' < production/traccar.yaml > /tmp/prod-render/traccar.yaml
+          envsubst '${TRACCAR_TOKEN_QA}' < production/traccar-reenviador.yaml > /tmp/prod-render/traccar-reenviador.yaml
           # Las imagenes de backend y frontend las despliega el workflow de cada
           # app (tag por SHA). Se conserva la que esta viva en el cluster para que
           # este apply no la cambie (el manifiesto del backend dice :latest, que

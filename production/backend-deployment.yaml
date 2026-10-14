@@ -54,6 +54,14 @@ spec:
                 secretKeyRef:
                   name: firebase-secret
                   key: FIREBASE_PROJECT_ID
+            # SCRUM-24: token que Traccar envia en X-Traccar-Token (Secret
+            # traccar-secret, creado por desplegar-produccion.yml desde el
+            # GitHub Secret TRACCAR_TOKEN); nunca se versiona en el repo.
+            - name: TRACCAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: traccar-secret
+                  key: token
           resources:
             requests:
               memory: "384Mi"

@@ -77,22 +77,18 @@ jobs:
             -n qa --dry-run=client -o yaml | kubectl apply -f -
 
           # SCRUM-24: secreto de integracion de Traccar (X-Traccar-Token). Lo
-          # usa el backend (valueFrom) y el forward de Traccar (envsubst abajo).
+          # usa el backend de QA (valueFrom) para aceptar la copia de cada
+          # posicion que manda el reenviador de produccion (Traccar ya no vive
+          # en QA; ver production/traccar-reenviador.yaml).
           kubectl create secret generic traccar-secret \
             --from-literal=token="$TRACCAR_TOKEN" \
             -n qa --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Aplicar manifiestos
-        env:
-          TRACCAR_TOKEN: ${{ secrets.TRACCAR_TOKEN }}
         run: |
           set -euo pipefail
-          # El ConfigMap de Traccar lleva el token en forward.header; se inyecta
-          # aca con envsubst para no versionarlo en claro. El resto de qa/ se
-          # aplica sin cambios. Solo se sustituye ${TRACCAR_TOKEN}.
           mkdir -p /tmp/qa-render
           cp qa/*.yaml /tmp/qa-render/
-          envsubst '${TRACCAR_TOKEN}' < qa/traccar.yaml > /tmp/qa-render/traccar.yaml
           # Las imagenes de backend y frontend las despliega el workflow de cada
           # app (tag por SHA). Se conserva la que esta viva en el cluster para que
           # este apply no revierta QA a un build anterior (tag-drift). La del
