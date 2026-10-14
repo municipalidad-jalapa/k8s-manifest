@@ -91,3 +91,22 @@ misma madrugada; los cambios posteriores a esa hora se pierden.
 Este procedimiento (pg_dump + Blob Storage) fue probado end-to-end en QA
 con evidencia real — ver comentario en SCRUM-163 para el detalle completo
 del ensayo (datos de prueba insertados, restaurados y verificados).
+
+### Prueba completa del 13-oct-2026 (respaldo real de producción)
+
+Se restauró el último respaldo de producción (`production/ecoruta-20261013-0411.sql.gz`, 337 KB comprimido) en una base temporal `ecoruta_restaurada` dentro del Postgres de QA, sin tocar ninguna base en uso, y se comparó con producción en vivo:
+
+| Dato | Restaurada | Producción en vivo |
+| --- | --- | --- |
+| Migraciones Flyway | iguales | iguales |
+| Rutas / paradas | 3 / 24 | 3 / 24 |
+| Vehículos / equipos / usuarios | 3 / 6 / 3 | 3 / 6 / 3 |
+| Red de calles (`calles`) | 4,053 | 4,053 |
+| Posiciones históricas | 409 | 833 (las 424 de diferencia llegaron del GPS después del respaldo) |
+| PostGIS / pgRouting | 3.4.2 / 3.6.1 | 3.4.3 / 3.6.1 |
+
+- Sin errores de `psql` en toda la restauración.
+- Tiempos: copiar el archivo al pod 2 s, restaurar 3 s; con la descarga desde Blob, **menos de 1 minuto** en total.
+- Al terminar se borró la base temporal y el archivo del pod.
+- Para restaurar sobre la base real seguir el paso 3 (renombrar `ecoruta` → `ecoruta_anterior` con el backend detenido).
+- Ojo con `kubectl cp` desde Windows: una ruta `C:/…` se interpreta como pod remoto. Usar `kubectl exec -i postgres-0 -- sh -c 'cat > /tmp/restaurar.sql.gz' < archivo.sql.gz`.
