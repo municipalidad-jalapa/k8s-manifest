@@ -1,0 +1,43 @@
+# Consola web de Traccar con HTTPS en https://gps.mibusjalapa.lat
+# El GPS sigue entrando por el puerto 5001 (Service traccar); la consola (8082)
+# solo se publica por aqui, con certificado, nunca en claro.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traccar-web
+  namespace: production
+spec:
+  selector:
+    app: traccar
+  ports:
+    - name: web
+      port: 8082
+      targetPort: 8082
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traccar-consola
+  namespace: production
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # la consola usa WebSocket para el mapa en vivo
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - gps.mibusjalapa.lat
+      secretName: gps-mibusjalapa-tls
+  rules:
+    - host: gps.mibusjalapa.lat
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: traccar-web
+                port:
+                  number: 8082
