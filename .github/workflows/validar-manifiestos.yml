@@ -1,8 +1,6 @@
 name: Validar manifiestos
 
-# Reemplaza al job validate-manifests de GitLab CI.
-# Requiere que el cluster de QA este encendido (igual que en GitLab): el
-# dry-run necesita hablar con el API server para resolver los tipos.
+# Valida contra los esquemas de Kubernetes sin necesitar ningun cluster.
 
 on:
   pull_request:
@@ -12,32 +10,29 @@ on:
       - ".github/workflows/**"
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
   validar:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Login en Azure (OIDC)
-        uses: azure/login@v2
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          persist-credentials: false
 
-      - name: Credenciales de aks-buses-dev
-        uses: azure/aks-set-context@v4
-        with:
-          resource-group: rg-buses-jalapa
-          cluster-name: aks-buses-dev
-
-      # --validate=false: el dry-run=client de kubectl intenta descargar el
-      # esquema OpenAPI del servidor para validar campos; sin esto la
-      # negociacion falla. El dry-run ya valida sintaxis y estructura.
-      - name: Dry-run de qa/ y production/
+      - name: kubeconform
         run: |
-          kubectl apply --dry-run=client --validate=false -f qa/
-          kubectl apply --dry-run=client --validate=false -f production/
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -sfL -o kubeconform-linux-amd64.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          echo "9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883  kubeconform-linux-amd64.tar.gz" | sha256sum -c -
+          tar xzf kubeconform-linux-amd64.tar.gz kubeconform
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/kubeconform" -strict -summary -ignore-missing-schemas -kubernetes-version 1.35.0 production qa
+
+      - name: Ningun Secret en el repositorio
+        run: |
+          if grep -rnE '^kind: *Secret *$' production qa; then
+            echo "::error::Los Secrets no van en este repositorio (es publico)."
+            exit 1
+          fi

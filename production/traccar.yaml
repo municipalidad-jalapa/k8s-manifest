@@ -120,10 +120,7 @@ spec:
   selector:
     app: traccar
   ports:
-    - name: web
-      port: 8082
-      targetPort: 8082
-      protocol: TCP
+    # La consola (8082) no se publica: no tiene TLS. Se entra por tunel SSH + port-forward.
     - name: gps103
       port: 5001
       targetPort: 5001
