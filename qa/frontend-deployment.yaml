@@ -13,9 +13,10 @@ spec:
       labels:
         app: frontend-app-buses
     spec:
+      priorityClassName: qa-baja
       containers:
         - name: frontend-app-buses
-          image: acrbusesjalapa.azurecr.io/frontend-app-buses:17c5d706
+          image: ghcr.io/municipalidad-jalapa/frontend-app-buses:31e50ec9
           ports:
             - containerPort: 80
           resources:

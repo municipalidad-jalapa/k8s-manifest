@@ -38,7 +38,7 @@ kind: PersistentVolumeClaim
 metadata: { name: loki-data, namespace: production }
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: managed-csi
+  storageClassName: local-path-retain
   resources: { requests: { storage: 5Gi } }
 ---
 apiVersion: apps/v1
@@ -128,6 +128,11 @@ spec:
         - name: promtail
           image: grafana/promtail:3.1.1
           args: ["-config.file=/etc/promtail/promtail.yaml"]
+          env:
+            # Promtail solo descubre pods de su nodo y lo identifica por HOSTNAME
+            # (sin esto es el nombre del pod y no recoge ningun log).
+            - name: HOSTNAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
           volumeMounts:
             - { name: config, mountPath: /etc/promtail }
             - { name: run, mountPath: /run/promtail }
@@ -139,7 +144,7 @@ spec:
         - { name: pods, hostPath: { path: /var/log/pods } }
 ---
 # ---------------- Grafana (el panel) ----------------
-# El Secret grafana-admin NO va en el repo (es publico): se crea en el cluster.
+# El Secret grafana-admin NO va en el repo (es publico): se crea en el servidor.
 ---
 apiVersion: v1
 kind: ConfigMap

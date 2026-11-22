@@ -8,7 +8,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: managed-csi
+  storageClassName: local-path-retain
   resources:
     requests:
       storage: 8Gi
@@ -30,6 +30,7 @@ spec:
       labels:
         app: postgres
     spec:
+      priorityClassName: qa-baja
       containers:
         - name: postgres
           image: pgrouting/pgrouting:16-3.4-3.6.1

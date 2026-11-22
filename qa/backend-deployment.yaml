@@ -13,9 +13,10 @@ spec:
       labels:
         app: backend-api-buses
     spec:
+      priorityClassName: qa-baja
       containers:
         - name: backend-api-buses
-          image: acrbusesjalapa.azurecr.io/backend-api-buses:ca313ace
+          image: ghcr.io/municipalidad-jalapa/backend-api-buses:de06efcf
           ports:
             - containerPort: 8080
           env:
@@ -46,7 +47,7 @@ spec:
                   key: ECORUTA_ADMIN_TOKEN
             # SCRUM-309 (HU-137): origen https habilitado tras el TLS de QA.
             - name: CORS_ORIGENES
-              value: "https://ecoruta-qa.tail47a5f7.ts.net"
+              value: "https://qa.mibusjalapa.lat"
             # SCRUM-310 (HU-138): credenciales del Admin SDK de Firebase. Los
             # nombres coinciden con ecoruta.firebase.credentials-json /
             # project-id (application.yml) para que el modulo de identidad
@@ -81,6 +82,13 @@ spec:
             limits:
               memory: "768Mi"
               cpu: "1000m"
+          startupProbe:
+            # En 2 vCPU el arranque tarda 50-90 s: sin esto la sonda de vida lo mata.
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

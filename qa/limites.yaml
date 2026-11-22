@@ -1,0 +1,32 @@
+# QA comparte servidor con produccion: menos prioridad y memoria acotada.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: qa-baja
+value: -100
+preemptionPolicy: Never
+globalDefault: false
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: qa-tope
+  namespace: qa
+spec:
+  hard:
+    requests.memory: 1200Mi
+    limits.memory: 2560Mi
+    requests.storage: 10Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: qa-defecto
+  namespace: qa
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        memory: 32Mi
+      default:
+        memory: 128Mi

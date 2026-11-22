@@ -43,7 +43,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: managed-csi
+  storageClassName: local-path-retain
   resources:
     requests:
       storage: 2Gi
@@ -115,9 +115,6 @@ kind: Service
 metadata:
   name: traccar
   namespace: production
-  annotations:
-    service.beta.kubernetes.io/azure-load-balancer-resource-group: "rg-buses-jalapa"
-    service.beta.kubernetes.io/azure-load-balancer-ipv4: "20.114.56.168"
 spec:
   type: LoadBalancer
   selector:

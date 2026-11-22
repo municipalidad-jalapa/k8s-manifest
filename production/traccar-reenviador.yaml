@@ -2,7 +2,7 @@
 #
 # Traccar manda cada posicion aqui. El reenviador la entrega al backend de
 # PRODUCCION (respuesta que ve Traccar) y manda una COPIA al backend de QA por
-# su dominio publico. Si QA esta apagado o falla, la copia se pierde sin
+# la red interna del cluster. Si QA esta apagado o falla, la copia se pierde sin
 # afectar a produccion: QA ve el GPS siempre que prod este encendido.
 #
 # Tokens: produccion usa el X-Traccar-Token que ya trae Traccar; la copia a QA
@@ -18,7 +18,7 @@ data:
   default.conf: |
     # DNS del cluster: resuelve el dominio de QA en cada peticion (si QA
     # cambia de IP o no resuelve, nginx igual arranca).
-    resolver 10.0.0.10 valid=60s ipv6=off;
+    resolver 10.43.0.10 valid=60s ipv6=off;
 
     server {
       listen 80;
@@ -33,11 +33,9 @@ data:
 
       location = /copia-qa {
         internal;
-        set $qa_host qa.mibusjalapa.lat;
-        proxy_pass https://$qa_host/api/v1/integraciones/traccar/posiciones;
-        proxy_set_header Host qa.mibusjalapa.lat;
+        set $qa_host backend-api-buses.qa.svc.cluster.local;
+        proxy_pass http://$qa_host/api/v1/integraciones/traccar/posiciones;
         proxy_set_header X-Traccar-Token "${TRACCAR_TOKEN_QA}";
-        proxy_ssl_server_name on;
         proxy_connect_timeout 2s;
         proxy_read_timeout 5s;
       }
