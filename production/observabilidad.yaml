@@ -139,13 +139,7 @@ spec:
         - { name: pods, hostPath: { path: /var/log/pods } }
 ---
 # ---------------- Grafana (el panel) ----------------
-apiVersion: v1
-kind: Secret
-metadata: { name: grafana-admin, namespace: production }
-type: Opaque
-stringData:
-  # Cambiar tras el primer ingreso.
-  admin-password: "EcoRuta_Grafana_2026!"
+# El Secret grafana-admin NO va en el repo (es publico): se crea en el cluster.
 ---
 apiVersion: v1
 kind: ConfigMap
