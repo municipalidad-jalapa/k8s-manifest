@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend-api-buses
-          image: acrbusesjalapa.azurecr.io/backend-api-buses:b4e21954
+          image: ghcr.io/municipalidad-jalapa/backend-api-buses:650f33c9
           ports:
             - containerPort: 8080
           env:
@@ -69,6 +69,13 @@ spec:
             limits:
               memory: "768Mi"
               cpu: "1000m"
+          startupProbe:
+            # En 2 vCPU el arranque tarda 50-90 s: sin esto la sonda de vida lo mata.
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

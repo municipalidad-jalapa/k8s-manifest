@@ -1,0 +1,57 @@
+name: Desplegar manifiestos
+
+# Aplica production/ y qa/ al servidor k3s (Lightsail) por SSH, con la aprobacion
+# del environment production. La llave solo puede ejecutar ecoruta-desplegar.
+#
+# - El servidor conserva la imagen que esta corriendo.
+# - Los Secrets no viajan: viven en el servidor (aqui no se acepta ninguno) y el
+#   servidor sustituye los marcadores de los tokens de Traccar.
+# - QA no tiene workflow propio: aplicar manifiestos equivale a administrar el
+#   cluster, asi que la llave de QA no puede hacerlo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "production/**"
+      - "qa/**"
+      - ".github/workflows/desplegar-manifiestos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desplegar-manifiestos
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      SERVIDOR: "3.149.211.241"
+      SERVIDOR_LLAVE: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP3HgshVaSO13z3hR2dT8IS4rWM2vKmE9Gue9En8Z5Od"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Aplicar por SSH
+        env:
+          LLAVE: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$LLAVE" ] || { echo "::error::Falta DEPLOY_SSH_KEY en el environment production"; exit 1; }
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/llave" "$RUNNER_TEMP/known_hosts"' EXIT
+          printf '%s\n' "$LLAVE" > "$RUNNER_TEMP/llave"
+          printf '%s %s\n' "$SERVIDOR" "$SERVIDOR_LLAVE" > "$RUNNER_TEMP/known_hosts"
+          for f in production/*.yaml qa/*.yaml; do
+            echo '---'
+            cat "$f"
+            echo
+          done | ssh -i "$RUNNER_TEMP/llave" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            -o ConnectTimeout=20 "despliegue-prod@$SERVIDOR" aplicar

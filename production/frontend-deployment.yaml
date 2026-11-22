@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend-app-buses
-          image: acrbusesjalapa.azurecr.io/frontend-app-buses:85afcb46
+          image: ghcr.io/municipalidad-jalapa/frontend-app-buses:85afcb46
           ports:
             - containerPort: 80
           resources:
