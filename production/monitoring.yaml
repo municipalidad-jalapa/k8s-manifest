@@ -125,13 +125,11 @@ metadata:
 data:
   alertmanager.yml: |
     global:
-      # Outlook desactivo SMTP AUTH basico a nivel de plataforma para cuentas
-      # personales, sin opcion de reactivarlo (ver hilo de SCRUM-151). Se usa
-      # una cuenta de Gmail dedicada como remitente en su lugar; el correo de
-      # destino en el receiver de abajo sigue siendo el de Outlook.
+      # Remitente: Gmail de LADS con contraseña de aplicación (Secret
+      # alertmanager-smtp-secret, clave smtp-password; nunca en el repositorio).
       smtp_smarthost: 'smtp.gmail.com:587'
-      smtp_from: 'notificacionesdesistema123@gmail.com'
-      smtp_auth_username: 'notificacionesdesistema123@gmail.com'
+      smtp_from: 'Alertas Mi Bus <lads.soluciones.tecnologicas@gmail.com>'
+      smtp_auth_username: 'lads.soluciones.tecnologicas@gmail.com'
       smtp_auth_password_file: /etc/alertmanager/secrets/smtp-password
       smtp_require_tls: true
 
@@ -146,7 +144,7 @@ data:
         email_configs:
           # Correo del equipo: cambiar aqui (no requiere tocar codigo ni
           # el Secret de la contraseña SMTP).
-          - to: 'umgseminario0@outlook.com'
+          - to: 'lads.soluciones.tecnologicas@gmail.com'
             send_resolved: true
 ---
 apiVersion: apps/v1
