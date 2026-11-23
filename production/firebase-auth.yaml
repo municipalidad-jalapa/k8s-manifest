@@ -1,0 +1,41 @@
+# Inicio de sesión con Google bajo el dominio propio: mibusjalapa.lat/__/auth/* -> mibus-jalapa.firebaseapp.com
+# El frontend se construye con VITE_FIREBASE_AUTH_DOMAIN=mibusjalapa.lat y el cliente OAuth del proyecto mibus-jalapa
+# tiene autorizada https://mibusjalapa.lat/__/auth/handler.
+apiVersion: v1
+kind: Service
+metadata:
+  name: firebase-auth
+  namespace: production
+spec:
+  type: ExternalName
+  externalName: mibus-jalapa.firebaseapp.com
+  ports:
+    - port: 443
+      name: https
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: firebase-auth
+  namespace: production
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/upstream-vhost: mibus-jalapa.firebaseapp.com
+    nginx.ingress.kubernetes.io/proxy-ssl-server-name: "on"
+    nginx.ingress.kubernetes.io/proxy-ssl-name: mibus-jalapa.firebaseapp.com
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [mibusjalapa.lat]
+      secretName: mibusjalapa-tls
+  rules:
+    - host: mibusjalapa.lat
+      http:
+        paths:
+          - path: /__/
+            pathType: Prefix
+            backend:
+              service:
+                name: firebase-auth
+                port:
+                  number: 443
