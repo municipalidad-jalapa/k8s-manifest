@@ -8,7 +8,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: umgseminario0@outlook.com
+    email: lads.soluciones.tecnologicas@gmail.com
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
